@@ -7,3 +7,5 @@ INFO 2026-04-04 19:39:18,489 autoreload /app/atendimento/views.py changed, reloa
 INFO 2026-04-04 19:39:18,858 autoreload Watching for file changes with StatReloader
 INFO 2026-04-04 19:40:00,843 basehttp "GET /api/schema/swagger-ui/ HTTP/1.1" 200 4671
 INFO 2026-04-04 19:40:00,901 basehttp "GET /api/schema/ HTTP/1.1" 200 69065
+INFO 2026-04-04 20:20:36,480 basehttp "GET /api/schema/swagger-ui/ HTTP/1.1" 200 4671
+INFO 2026-04-04 20:20:36,534 basehttp "GET /api/schema/ HTTP/1.1" 200 69065
