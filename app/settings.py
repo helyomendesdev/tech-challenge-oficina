@@ -37,6 +37,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'rest_framework_simplejwt', # Para Autenticação JWT [cite: 43]
+    'drf_spectacular',           # Para Documentação Swagger [cite: 51]
+    'atendimento',               # Seu app de domínio
 ]
 
 MIDDLEWARE = [
@@ -72,10 +76,16 @@ WSGI_APPLICATION = 'app.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+import os
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': os.environ.get('POSTGRES_DB', 'oficina_db'),
+        'USER': os.environ.get('POSTGRES_USER', 'admin'),
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'admin_pass'),
+        'HOST': os.environ.get('DB_HOST', 'db'), # Nome do serviço no docker-compose
+        'PORT': '5432',
     }
 }
 
@@ -115,3 +125,22 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+
+# Final do arquivo original
+
+REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+# Configuração do Swagger [cite: 51]
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'API Oficina Mecânica - Tech Challenge',
+    'DESCRIPTION': 'Sistema de gestão de Ordens de Serviço e estoque.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+}
+
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

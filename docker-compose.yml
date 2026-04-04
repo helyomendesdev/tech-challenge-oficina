@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:15
+    container_name: oficina_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=oficina_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin_pass
+    ports:
+      - "5432:5432"
+
+  web:
+    build: .
+    container_name: oficina_app
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - POSTGRES_DB=oficina_db
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin_pass
+      - DB_HOST=db
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
