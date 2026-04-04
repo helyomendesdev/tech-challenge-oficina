@@ -27,3 +27,11 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrdemServico
         fields = '__all__'
+
+class ItemPecaOSSerializer(serializers.ModelSerializer):
+    # Campo calculado (total_item) que definimos na Model
+    total_item = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    
+    class Meta:
+        model = ItemPecaOS
+        fields = ['id', 'os', 'peca', 'quantidade', 'total_item']

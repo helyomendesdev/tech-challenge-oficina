@@ -1,11 +1,12 @@
 from rest_framework import viewsets
-from .models import Cliente, Veiculo, OrdemServico, Servico, Peca
+from .models import Cliente, Veiculo, OrdemServico, Servico, Peca, ItemPecaOS
 from .serializers import (
     ClienteSerializer, 
     VeiculoSerializer, 
     OrdemServicoSerializer, 
     ServicoSerializer, 
-    PecaSerializer
+    PecaSerializer,
+    ItemPecaOSSerializer
 )
 
 class ClienteViewSet(viewsets.ModelViewSet):
@@ -27,3 +28,7 @@ class PecaViewSet(viewsets.ModelViewSet):
 class OrdemServicoViewSet(viewsets.ModelViewSet):
     queryset = OrdemServico.objects.all()
     serializer_class = OrdemServicoSerializer
+
+class ItemPecaOSViewSet(viewsets.ModelViewSet):
+    queryset = ItemPecaOS.objects.all()
+    serializer_class = ItemPecaOSSerializer
