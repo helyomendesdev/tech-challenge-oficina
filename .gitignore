@@ -19,6 +19,4 @@ staticfiles/
 .idea/
 .DS_Store
 
-echo "oficina_atividade.log" >> .gitignore
-echo "__pycache__/" >> .gitignore
-echo "*.pyc" >> .gitignore
+oficina_atividades.logoficina_atividades.log
