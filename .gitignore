@@ -14,9 +14,10 @@ db.sqlite3
 media/
 staticfiles/
 
+# Logs do Sistema (Requisito de Qualidade)
+oficina_atividades.log
+
 # IDEs
 .vscode/
 .idea/
 .DS_Store
-
-oficina_atividades.logoficina_atividades.log
