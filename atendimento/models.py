@@ -100,8 +100,21 @@ class ItemPecaOS(models.Model):
         return self.peca.valor_unitario * self.quantidade
     
     def save(self, *args, **kwargs):
+        # 1. Validação de Estoque (Regra de Negócio)
+        if self.peca.estoque_atual < self.quantidade:
+            raise ValidationError(
+                f"Estoque insuficiente para a peça {self.peca.nome}. "
+                f"Disponível: {self.peca.estoque_atual}, Solicitado: {self.quantidade}"
+            )
+
+        # 2. Se for um item novo (sem ID), damos a baixa no estoque
+        if not self.pk:
+            self.peca.estoque_atual -= self.quantidade
+            self.peca.save()
+
         super().save(*args, **kwargs)
-        # Agora o método calcular_total() existe e vai funcionar!
+        
+        # 3. Atualiza o valor total da OS
         self.os.calcular_total()
 
 # SIGNALS ORGANIZADOS (Sem duplicidade)
