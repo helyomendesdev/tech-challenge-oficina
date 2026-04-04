@@ -71,19 +71,30 @@ class OrdemServico(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RECEBIDA')
     servicos = models.ManyToManyField(Servico, blank=True)
     data_abertura = models.DateTimeField(auto_now_add=True)
+    
+    # NOVOS CAMPOS PARA MONITORAMENTO (Requisito 40 do PDF)
+    data_inicio_execucao = models.DateTimeField(null=True, blank=True)
+    data_finalizacao = models.DateTimeField(null=True, blank=True)
+    
     valor_total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
 
-    # CRIAMOS O MÉTODO QUE ESTAVA FALTANDO:
     def calcular_total(self):
         total_servicos = sum(s.valor_mao_de_obra for s in self.servicos.all())
         total_pecas = sum(item.total_item for item in self.itens_pecas.all())
         novo_total = total_servicos + total_pecas
         
         if self.valor_total != novo_total:
-            self.valor_total = novo_total
+            # Usamos update para evitar recursão infinita no save
             OrdemServico.objects.filter(pk=self.pk).update(valor_total=novo_total)
 
     def save(self, *args, **kwargs):
+        # Lógica de alteração automática de status e tempos (Requisito 32 e 40)
+        if self.status == 'EXECUCAO' and not self.data_inicio_execucao:
+            self.data_inicio_execucao = timezone.now()
+        
+        if self.status == 'FINALIZADA' and not self.data_finalizacao:
+            self.data_finalizacao = timezone.now()
+
         super().save(*args, **kwargs)
         self.calcular_total()
 
