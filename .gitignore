@@ -1,0 +1,20 @@
+# Ambientes Virtuais
+venv/
+env/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Django (Segurança - Aula 1 e 6 de Dev Seguro)
+.env
+db.sqlite3
+media/
+staticfiles/
+
+# IDEs
+.vscode/
+.idea/
+.DS_Store
