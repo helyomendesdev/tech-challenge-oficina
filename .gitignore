@@ -18,3 +18,7 @@ staticfiles/
 .vscode/
 .idea/
 .DS_Store
+
+echo "oficina_atividade.log" >> .gitignore
+echo "__pycache__/" >> .gitignore
+echo "*.pyc" >> .gitignore
