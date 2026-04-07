@@ -21,3 +21,7 @@ oficina_atividades.log
 .vscode/
 .idea/
 .DS_Store
+
+relatorio_vulnerabilidades.txt
+seguranca_atendimento.txt
+seguranca_settings.txt
