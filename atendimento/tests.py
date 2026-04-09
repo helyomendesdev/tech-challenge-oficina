@@ -3,7 +3,7 @@ from .models import Cliente, Veiculo, OrdemServico, Peca, ItemPecaOS
 
 class OrdemServicoTest(TestCase):
     def setUp(self):
-        # Setup básico que já validamos que funciona
+        # O setUp funciona como um "Global Arrange"
         self.cliente = Cliente.objects.create(nome="Hélio Teste", email="helio@teste.com")
         self.veiculo = Veiculo.objects.create(
             modelo="Golf GTI", 
@@ -15,18 +15,25 @@ class OrdemServicoTest(TestCase):
         self.peca = Peca.objects.create(nome="Pastilha", valor_unitario=90.00, estoque_atual=10)
 
     def test_calculo_total_os_com_peca(self):
-        """Testa se adicionar uma peça de 90.00 atualiza o total da OS para 90.00"""
-        ItemPecaOS.objects.create(os=self.os, peca=self.peca, quantidade=1)
-        
+        # 1. Arrange (O setup já criou a OS e a Peça)
+        quantidade = 1
+        valor_esperado = 90.00
+
+        # 2. Act (Executa a ação de adicionar a peça)
+        ItemPecaOS.objects.create(os=self.os, peca=self.peca, quantidade=quantidade)
         self.os.refresh_from_db()
         
-        # Se a OS estava em 0 e add uma peça de 90, o total deve ser 90
-        self.assertEqual(float(self.os.valor_total), 90.00)
+        # 3. Assert (Verifica o resultado)
+        self.assertEqual(float(self.os.valor_total), valor_esperado)
 
     def test_baixa_estoque_automatica(self):
-        """Testa se o estoque cai de 10 para 7 ao usar 3 peças"""
-        ItemPecaOS.objects.create(os=self.os, peca=self.peca, quantidade=3)
+        # 1. Arrange
+        quantidade_usada = 3
+        estoque_esperado = 7 # 10 inicial - 3 usado
+        
+        # 2. Act
+        ItemPecaOS.objects.create(os=self.os, peca=self.peca, quantidade=quantidade_usada)
         self.peca.refresh_from_db()
         
-        # 10 - 3 = 7
-        self.assertEqual(self.peca.estoque_atual, 7)
+        # 3. Assert
+        self.assertEqual(self.peca.estoque_atual, estoque_esperado)
