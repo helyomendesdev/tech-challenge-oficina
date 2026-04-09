@@ -1,0 +1,155 @@
+[
+{
+  "model": "atendimento.cliente",
+  "pk": 1,
+  "fields": {
+    "nome": "Hélio",
+    "documento": "00003943356",
+    "email": "helyomendes@gmail.com",
+    "telefone": "86999241487",
+    "criado_em": "2026-04-04T02:50:18.583Z"
+  }
+},
+{
+  "model": "atendimento.veiculo",
+  "pk": 1,
+  "fields": {
+    "cliente": 1,
+    "placa": "QRQ1234",
+    "marca": "NISSAN",
+    "modelo": "KIKCS",
+    "ano": 2020
+  }
+},
+{
+  "model": "atendimento.servico",
+  "pk": 1,
+  "fields": {
+    "descricao": "Troca de Óleo",
+    "valor_mao_de_obra": "100.00"
+  }
+},
+{
+  "model": "atendimento.peca",
+  "pk": 1,
+  "fields": {
+    "nome": "Freio",
+    "valor_unitario": "90.00",
+    "estoque_atual": 5
+  }
+},
+{
+  "model": "atendimento.peca",
+  "pk": 2,
+  "fields": {
+    "nome": "Filtro de Óleo",
+    "valor_unitario": "50.00",
+    "estoque_atual": 10
+  }
+},
+{
+  "model": "atendimento.ordemservico",
+  "pk": 2,
+  "fields": {
+    "cliente": 1,
+    "veiculo": 1,
+    "status": "EXECUCAO",
+    "data_abertura": "2026-04-04T02:53:24.394Z",
+    "data_inicio_execucao": null,
+    "data_finalizacao": null,
+    "valor_total": "180.00",
+    "servicos": []
+  }
+},
+{
+  "model": "atendimento.ordemservico",
+  "pk": 3,
+  "fields": {
+    "cliente": 1,
+    "veiculo": 1,
+    "status": "RECEBIDA",
+    "data_abertura": "2026-04-04T16:17:41.557Z",
+    "data_inicio_execucao": null,
+    "data_finalizacao": null,
+    "valor_total": "100.00",
+    "servicos": [
+      1
+    ]
+  }
+},
+{
+  "model": "atendimento.ordemservico",
+  "pk": 4,
+  "fields": {
+    "cliente": 1,
+    "veiculo": 1,
+    "status": "RECEBIDA",
+    "data_abertura": "2026-04-04T16:18:09.409Z",
+    "data_inicio_execucao": null,
+    "data_finalizacao": null,
+    "valor_total": "550.00",
+    "servicos": [
+      1
+    ]
+  }
+},
+{
+  "model": "atendimento.ordemservico",
+  "pk": 5,
+  "fields": {
+    "cliente": 1,
+    "veiculo": 1,
+    "status": "RECEBIDA",
+    "data_abertura": "2026-04-04T16:38:36.890Z",
+    "data_inicio_execucao": null,
+    "data_finalizacao": null,
+    "valor_total": "0.00",
+    "servicos": []
+  }
+},
+{
+  "model": "atendimento.itempecaos",
+  "pk": 1,
+  "fields": {
+    "os": 2,
+    "peca": 1,
+    "quantidade": 2
+  }
+},
+{
+  "model": "atendimento.itempecaos",
+  "pk": 2,
+  "fields": {
+    "os": 2,
+    "peca": 2,
+    "quantidade": 1
+  }
+},
+{
+  "model": "atendimento.itempecaos",
+  "pk": 3,
+  "fields": {
+    "os": 4,
+    "peca": 1,
+    "quantidade": 2
+  }
+},
+{
+  "model": "atendimento.itempecaos",
+  "pk": 4,
+  "fields": {
+    "os": 4,
+    "peca": 1,
+    "quantidade": 2
+  }
+},
+{
+  "model": "atendimento.itempecaos",
+  "pk": 5,
+  "fields": {
+    "os": 4,
+    "peca": 1,
+    "quantidade": 1
+  }
+}
+]
