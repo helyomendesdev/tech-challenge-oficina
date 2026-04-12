@@ -1,0 +1,396 @@
+[
+  {
+    "model": "atendimento.cliente",
+    "pk": 2,
+    "fields": {
+      "nome": "João Silva",
+      "documento": "52998224725",
+      "email": "joao.silva@gmail.com",
+      "telefone": "11987654321",
+      "criado_em": "2026-01-10T08:00:00.000Z"
+    }
+  },
+  {
+    "model": "atendimento.cliente",
+    "pk": 3,
+    "fields": {
+      "nome": "Maria Santos",
+      "documento": "11144477735",
+      "email": "maria.santos@outlook.com",
+      "telefone": "21976543210",
+      "criado_em": "2026-01-15T09:30:00.000Z"
+    }
+  },
+  {
+    "model": "atendimento.cliente",
+    "pk": 4,
+    "fields": {
+      "nome": "Pedro Oliveira",
+      "documento": "15350946056",
+      "email": "pedro.oliveira@yahoo.com.br",
+      "telefone": "31965432109",
+      "criado_em": "2026-02-01T10:00:00.000Z"
+    }
+  },
+  {
+    "model": "atendimento.cliente",
+    "pk": 5,
+    "fields": {
+      "nome": "Ana Costa",
+      "documento": "37065727040",
+      "email": "ana.costa@gmail.com",
+      "telefone": "41954321098",
+      "criado_em": "2026-02-20T11:00:00.000Z"
+    }
+  },
+  {
+    "model": "atendimento.cliente",
+    "pk": 6,
+    "fields": {
+      "nome": "Transportes Brasil LTDA",
+      "documento": "11222333000181",
+      "email": "frota@transportesbrasil.com.br",
+      "telefone": "1133445566",
+      "criado_em": "2026-03-05T08:00:00.000Z"
+    }
+  },
+  {
+    "model": "atendimento.veiculo",
+    "pk": 2,
+    "fields": {
+      "cliente": 2,
+      "placa": "ABC1234",
+      "marca": "HONDA",
+      "modelo": "CIVIC",
+      "ano": 2019
+    }
+  },
+  {
+    "model": "atendimento.veiculo",
+    "pk": 3,
+    "fields": {
+      "cliente": 2,
+      "placa": "DEF5678",
+      "marca": "FORD",
+      "modelo": "KA",
+      "ano": 2021
+    }
+  },
+  {
+    "model": "atendimento.veiculo",
+    "pk": 4,
+    "fields": {
+      "cliente": 3,
+      "placa": "GHI9J23",
+      "marca": "TOYOTA",
+      "modelo": "COROLLA",
+      "ano": 2022
+    }
+  },
+  {
+    "model": "atendimento.veiculo",
+    "pk": 5,
+    "fields": {
+      "cliente": 4,
+      "placa": "JKL4M56",
+      "marca": "VOLKSWAGEN",
+      "modelo": "GOL",
+      "ano": 2018
+    }
+  },
+  {
+    "model": "atendimento.veiculo",
+    "pk": 6,
+    "fields": {
+      "cliente": 4,
+      "placa": "NOP7Q89",
+      "marca": "FIAT",
+      "modelo": "UNO",
+      "ano": 2017
+    }
+  },
+  {
+    "model": "atendimento.veiculo",
+    "pk": 7,
+    "fields": {
+      "cliente": 5,
+      "placa": "RST2U34",
+      "marca": "CHEVROLET",
+      "modelo": "ONIX",
+      "ano": 2023
+    }
+  },
+  {
+    "model": "atendimento.veiculo",
+    "pk": 8,
+    "fields": {
+      "cliente": 6,
+      "placa": "VWX5Y67",
+      "marca": "FIAT",
+      "modelo": "TORO",
+      "ano": 2021
+    }
+  },
+  {
+    "model": "atendimento.servico",
+    "pk": 2,
+    "fields": {
+      "descricao": "Alinhamento e Balanceamento",
+      "valor_mao_de_obra": "120.00"
+    }
+  },
+  {
+    "model": "atendimento.servico",
+    "pk": 3,
+    "fields": {
+      "descricao": "Revisão Completa",
+      "valor_mao_de_obra": "350.00"
+    }
+  },
+  {
+    "model": "atendimento.servico",
+    "pk": 4,
+    "fields": {
+      "descricao": "Troca de Pneu",
+      "valor_mao_de_obra": "80.00"
+    }
+  },
+  {
+    "model": "atendimento.servico",
+    "pk": 5,
+    "fields": {
+      "descricao": "Troca de Pastilha de Freio",
+      "valor_mao_de_obra": "200.00"
+    }
+  },
+  {
+    "model": "atendimento.servico",
+    "pk": 6,
+    "fields": {
+      "descricao": "Higienização de Ar-Condicionado",
+      "valor_mao_de_obra": "150.00"
+    }
+  },
+  {
+    "model": "atendimento.servico",
+    "pk": 7,
+    "fields": {
+      "descricao": "Diagnóstico Eletrônico",
+      "valor_mao_de_obra": "90.00"
+    }
+  },
+  {
+    "model": "atendimento.servico",
+    "pk": 8,
+    "fields": {
+      "descricao": "Troca de Correia Dentada",
+      "valor_mao_de_obra": "450.00"
+    }
+  },
+  {
+    "model": "atendimento.peca",
+    "pk": 3,
+    "fields": {
+      "nome": "Pastilha de Freio Dianteira",
+      "valor_unitario": "120.00",
+      "estoque_atual": 15
+    }
+  },
+  {
+    "model": "atendimento.peca",
+    "pk": 4,
+    "fields": {
+      "nome": "Filtro de Ar",
+      "valor_unitario": "35.00",
+      "estoque_atual": 20
+    }
+  },
+  {
+    "model": "atendimento.peca",
+    "pk": 5,
+    "fields": {
+      "nome": "Correia Dentada",
+      "valor_unitario": "180.00",
+      "estoque_atual": 8
+    }
+  },
+  {
+    "model": "atendimento.peca",
+    "pk": 6,
+    "fields": {
+      "nome": "Óleo Motor 5W30 1L",
+      "valor_unitario": "28.00",
+      "estoque_atual": 50
+    }
+  },
+  {
+    "model": "atendimento.peca",
+    "pk": 7,
+    "fields": {
+      "nome": "Pastilha de Freio Traseira",
+      "valor_unitario": "100.00",
+      "estoque_atual": 12
+    }
+  },
+  {
+    "model": "atendimento.peca",
+    "pk": 8,
+    "fields": {
+      "nome": "Filtro de Combustível",
+      "valor_unitario": "45.00",
+      "estoque_atual": 18
+    }
+  },
+  {
+    "model": "atendimento.peca",
+    "pk": 9,
+    "fields": {
+      "nome": "Amortecedor Dianteiro",
+      "valor_unitario": "280.00",
+      "estoque_atual": 6
+    }
+  },
+  {
+    "model": "atendimento.peca",
+    "pk": 10,
+    "fields": {
+      "nome": "Vela de Ignição (jogo)",
+      "valor_unitario": "95.00",
+      "estoque_atual": 25
+    }
+  },
+  {
+    "model": "atendimento.ordemservico",
+    "pk": 6,
+    "fields": {
+      "cliente": 2,
+      "veiculo": 2,
+      "status": "RECEBIDA",
+      "data_abertura": "2026-03-10T08:30:00.000Z",
+      "data_inicio_execucao": null,
+      "data_finalizacao": null,
+      "valor_total": "120.00",
+      "servicos": [2]
+    }
+  },
+  {
+    "model": "atendimento.ordemservico",
+    "pk": 7,
+    "fields": {
+      "cliente": 2,
+      "veiculo": 3,
+      "status": "DIAGNOSTICO",
+      "data_abertura": "2026-03-12T09:00:00.000Z",
+      "data_inicio_execucao": null,
+      "data_finalizacao": null,
+      "valor_total": "90.00",
+      "servicos": [7]
+    }
+  },
+  {
+    "model": "atendimento.ordemservico",
+    "pk": 8,
+    "fields": {
+      "cliente": 3,
+      "veiculo": 4,
+      "status": "AGUARDANDO",
+      "data_abertura": "2026-03-15T10:00:00.000Z",
+      "data_inicio_execucao": null,
+      "data_finalizacao": null,
+      "valor_total": "550.00",
+      "servicos": [3, 5]
+    }
+  },
+  {
+    "model": "atendimento.ordemservico",
+    "pk": 9,
+    "fields": {
+      "cliente": 4,
+      "veiculo": 5,
+      "status": "EXECUCAO",
+      "data_abertura": "2026-03-20T07:00:00.000Z",
+      "data_inicio_execucao": "2026-03-21T08:00:00.000Z",
+      "data_finalizacao": null,
+      "valor_total": "360.00",
+      "servicos": [2]
+    }
+  },
+  {
+    "model": "atendimento.ordemservico",
+    "pk": 10,
+    "fields": {
+      "cliente": 4,
+      "veiculo": 6,
+      "status": "FINALIZADA",
+      "data_abertura": "2026-03-22T08:00:00.000Z",
+      "data_inicio_execucao": "2026-03-23T09:00:00.000Z",
+      "data_finalizacao": "2026-03-24T17:00:00.000Z",
+      "valor_total": "630.00",
+      "servicos": [8]
+    }
+  },
+  {
+    "model": "atendimento.ordemservico",
+    "pk": 11,
+    "fields": {
+      "cliente": 5,
+      "veiculo": 7,
+      "status": "ENTREGUE",
+      "data_abertura": "2026-03-25T08:00:00.000Z",
+      "data_inicio_execucao": "2026-03-26T08:00:00.000Z",
+      "data_finalizacao": "2026-03-27T16:00:00.000Z",
+      "valor_total": "265.00",
+      "servicos": [4, 6]
+    }
+  },
+  {
+    "model": "atendimento.ordemservico",
+    "pk": 12,
+    "fields": {
+      "cliente": 6,
+      "veiculo": 8,
+      "status": "RECEBIDA",
+      "data_abertura": "2026-04-01T08:00:00.000Z",
+      "data_inicio_execucao": null,
+      "data_finalizacao": null,
+      "valor_total": "350.00",
+      "servicos": [3]
+    }
+  },
+  {
+    "model": "atendimento.itempecaos",
+    "pk": 6,
+    "fields": {
+      "os": 9,
+      "peca": 3,
+      "quantidade": 2
+    }
+  },
+  {
+    "model": "atendimento.itempecaos",
+    "pk": 7,
+    "fields": {
+      "os": 10,
+      "peca": 5,
+      "quantidade": 1
+    }
+  },
+  {
+    "model": "atendimento.itempecaos",
+    "pk": 8,
+    "fields": {
+      "os": 10,
+      "peca": 6,
+      "quantidade": 4
+    }
+  },
+  {
+    "model": "atendimento.itempecaos",
+    "pk": 9,
+    "fields": {
+      "os": 11,
+      "peca": 4,
+      "quantidade": 1
+    }
+  }
+]
