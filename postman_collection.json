@@ -1,0 +1,875 @@
+{
+  "info": {
+    "name": "Oficina Mecânica API",
+    "_postman_id": "oficina-api-v1",
+    "description": "Collection completa para testar a API do Tech Challenge Fase 1 - FIAP.\n\n**Como usar:**\n1. Importe também o arquivo `postman_environment.json`\n2. Selecione o environment \"Oficina Local\"\n3. Execute \"Obter Token\" primeiro — o token é salvo automaticamente\n4. Todas as demais requisições já usam o token automaticamente",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [],
+  "item": [
+    {
+      "name": "Autenticação",
+      "description": "Endpoints JWT para obter e renovar tokens de acesso.",
+      "item": [
+        {
+          "name": "Obter Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.environment.set('access_token', json.access);",
+                  "    pm.environment.set('refresh_token', json.refresh);",
+                  "    pm.test('Token obtido com sucesso', () => pm.response.to.have.status(200));",
+                  "    console.log('✅ access_token salvo no environment');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/token/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "token", ""]
+            },
+            "description": "Autentica com usuário/senha e salva o `access_token` e `refresh_token` automaticamente no environment."
+          }
+        },
+        {
+          "name": "Renovar Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.environment.set('access_token', json.access);",
+                  "    pm.test('Token renovado com sucesso', () => pm.response.to.have.status(200));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/token/refresh/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "token", "refresh", ""]
+            },
+            "description": "Usa o refresh_token para obter um novo access_token sem precisar reautenticar."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Clientes",
+      "description": "CRUD completo de clientes. Aceita CPF (11 dígitos) ou CNPJ (14 dígitos).",
+      "item": [
+        {
+          "name": "Listar Clientes",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/clientes/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "clientes", ""]
+            }
+          }
+        },
+        {
+          "name": "Buscar Cliente por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/clientes/2/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "clientes", "2", ""]
+            },
+            "description": "Retorna os dados de um cliente específico."
+          }
+        },
+        {
+          "name": "Criar Cliente (CPF)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Carlos Mendes\",\n  \"documento\": \"04580827600\",\n  \"email\": \"carlos.mendes@email.com\",\n  \"telefone\": \"51912345678\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/clientes/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "clientes", ""]
+            },
+            "description": "CPF deve ser válido (algoritmo Receita Federal). Sem pontuação."
+          }
+        },
+        {
+          "name": "Criar Cliente (CNPJ)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Frota Expressa EIRELI\",\n  \"documento\": \"45543915000107\",\n  \"email\": \"contato@frotaexpressa.com.br\",\n  \"telefone\": \"1140028922\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/clientes/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "clientes", ""]
+            },
+            "description": "CNPJ deve ter 14 dígitos sem pontuação."
+          }
+        },
+        {
+          "name": "Atualizar Cliente (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"João Silva Atualizado\",\n  \"documento\": \"52998224725\",\n  \"email\": \"joao.novo@gmail.com\",\n  \"telefone\": \"11999888777\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/clientes/2/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "clientes", "2", ""]
+            }
+          }
+        },
+        {
+          "name": "Atualizar Cliente Parcial (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"telefone\": \"11988776655\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/clientes/2/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "clientes", "2", ""]
+            },
+            "description": "Atualiza apenas os campos enviados."
+          }
+        },
+        {
+          "name": "Deletar Cliente",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/clientes/99/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "clientes", "99", ""]
+            },
+            "description": "⚠️ Use um ID sem OS vinculada para não violar a restrição PROTECT."
+          }
+        },
+        {
+          "name": "ERRO - CPF Inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Teste Inválido\",\n  \"documento\": \"11111111111\",\n  \"email\": \"teste@email.com\",\n  \"telefone\": \"11999999999\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/clientes/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "clientes", ""]
+            },
+            "description": "Deve retornar 400 com mensagem de CPF inválido."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Veículos",
+      "description": "CRUD de veículos. Placa aceita formato antigo (ABC1234) e Mercosul (ABC1D23).",
+      "item": [
+        {
+          "name": "Listar Veículos",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/veiculos/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "veiculos", ""]
+            }
+          }
+        },
+        {
+          "name": "Buscar Veículo por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/veiculos/2/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "veiculos", "2", ""]
+            }
+          }
+        },
+        {
+          "name": "Criar Veículo (Placa Antiga)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente\": 3,\n  \"placa\": \"MNO3456\",\n  \"marca\": \"HYUNDAI\",\n  \"modelo\": \"HB20\",\n  \"ano\": 2020\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/veiculos/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "veiculos", ""]
+            },
+            "description": "Formato antigo: 3 letras + 4 números (ABC1234)."
+          }
+        },
+        {
+          "name": "Criar Veículo (Placa Mercosul)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente\": 4,\n  \"placa\": \"BRA2E19\",\n  \"marca\": \"RENAULT\",\n  \"modelo\": \"KWID\",\n  \"ano\": 2023\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/veiculos/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "veiculos", ""]
+            },
+            "description": "Formato Mercosul: 3 letras + 1 número + 1 letra + 2 números (ABC1D23)."
+          }
+        },
+        {
+          "name": "Atualizar Veículo (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ano\": 2020\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/veiculos/5/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "veiculos", "5", ""]
+            }
+          }
+        },
+        {
+          "name": "Deletar Veículo",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/veiculos/99/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "veiculos", "99", ""]
+            }
+          }
+        },
+        {
+          "name": "ERRO - Placa Inválida",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente\": 2,\n  \"placa\": \"INVALIDA\",\n  \"marca\": \"FORD\",\n  \"modelo\": \"RANGER\",\n  \"ano\": 2022\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/veiculos/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "veiculos", ""]
+            },
+            "description": "Deve retornar 400 com mensagem de placa inválida."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Serviços",
+      "description": "Catálogo de serviços/mão de obra da oficina.",
+      "item": [
+        {
+          "name": "Listar Serviços",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/servicos/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "servicos", ""]
+            }
+          }
+        },
+        {
+          "name": "Buscar Serviço por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/servicos/1/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "servicos", "1", ""]
+            }
+          }
+        },
+        {
+          "name": "Criar Serviço",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Funilaria e Pintura\",\n  \"valor_mao_de_obra\": \"850.00\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/servicos/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "servicos", ""]
+            }
+          }
+        },
+        {
+          "name": "Atualizar Serviço (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Troca de Óleo e Filtro\",\n  \"valor_mao_de_obra\": \"120.00\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/servicos/1/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "servicos", "1", ""]
+            }
+          }
+        },
+        {
+          "name": "Atualizar Serviço (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"valor_mao_de_obra\": \"130.00\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/servicos/1/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "servicos", "1", ""]
+            }
+          }
+        },
+        {
+          "name": "Deletar Serviço",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/servicos/99/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "servicos", "99", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Peças",
+      "description": "Catálogo de peças com controle de estoque. A baixa é automática ao adicionar uma peça a uma OS.",
+      "item": [
+        {
+          "name": "Listar Peças (com estoque)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/pecas/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "pecas", ""]
+            }
+          }
+        },
+        {
+          "name": "Buscar Peça por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/pecas/3/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "pecas", "3", ""]
+            },
+            "description": "Retorna detalhes da peça incluindo `estoque_atual`."
+          }
+        },
+        {
+          "name": "Criar Peça",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Kit Embreagem\",\n  \"valor_unitario\": \"320.00\",\n  \"estoque_atual\": 4\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/pecas/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "pecas", ""]
+            }
+          }
+        },
+        {
+          "name": "Atualizar Estoque (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estoque_atual\": 30\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/pecas/6/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "pecas", "6", ""]
+            },
+            "description": "Atualiza o estoque do Óleo Motor 5W30 para 30 unidades."
+          }
+        },
+        {
+          "name": "Atualizar Peça (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Filtro de Ar Premium\",\n  \"valor_unitario\": \"42.00\",\n  \"estoque_atual\": 25\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/pecas/4/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "pecas", "4", ""]
+            }
+          }
+        },
+        {
+          "name": "Deletar Peça",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/pecas/99/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "pecas", "99", ""]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ordens de Serviço",
+      "description": "Fluxo completo de OS. Status: RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE",
+      "item": [
+        {
+          "name": "Listar Todas as OS",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", ""]
+            }
+          }
+        },
+        {
+          "name": "Buscar OS por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/9/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "9", ""]
+            },
+            "description": "OS 9 está em EXECUCAO com pastilhas de freio adicionadas."
+          }
+        },
+        {
+          "name": "Abrir OS (só serviços)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente\": 3,\n  \"veiculo\": 4,\n  \"status\": \"RECEBIDA\",\n  \"servicos\": [2, 7]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", ""]
+            },
+            "description": "Cria uma OS com serviços já vinculados. `valor_total` é calculado automaticamente."
+          }
+        },
+        {
+          "name": "Abrir OS (sem serviços)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente\": 5,\n  \"veiculo\": 7,\n  \"status\": \"RECEBIDA\",\n  \"servicos\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", ""]
+            }
+          }
+        },
+        {
+          "name": "Avançar Status → DIAGNOSTICO",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"DIAGNOSTICO\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/6/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "6", ""]
+            }
+          }
+        },
+        {
+          "name": "Avançar Status → AGUARDANDO",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"AGUARDANDO\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/6/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "6", ""]
+            }
+          }
+        },
+        {
+          "name": "Avançar Status → EXECUCAO",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"EXECUCAO\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/6/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "6", ""]
+            },
+            "description": "Ao mudar para EXECUCAO, o campo `data_inicio_execucao` é preenchido automaticamente."
+          }
+        },
+        {
+          "name": "Avançar Status → FINALIZADA",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"FINALIZADA\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/6/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "6", ""]
+            },
+            "description": "Ao finalizar, `data_finalizacao` é preenchida automaticamente."
+          }
+        },
+        {
+          "name": "Avançar Status → ENTREGUE",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ENTREGUE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/6/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "6", ""]
+            }
+          }
+        },
+        {
+          "name": "Adicionar Serviço à OS (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"servicos\": [2, 4, 5]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/7/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "7", ""]
+            },
+            "description": "Atualiza a lista de serviços. O `valor_total` é recalculado automaticamente via signal."
+          }
+        },
+        {
+          "name": "Deletar OS",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/99/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "99", ""]
+            }
+          }
+        },
+        {
+          "name": "Consulta Cliente por Placa (público)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/consulta-cliente/?identificador=JKL4M56",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "consulta-cliente", ""],
+              "query": [
+                {
+                  "key": "identificador",
+                  "value": "JKL4M56",
+                  "description": "Placa do veículo de Pedro Oliveira"
+                }
+              ]
+            },
+            "description": "Endpoint PÚBLICO (sem token). Consulta a OS mais recente pela placa do veículo."
+          }
+        },
+        {
+          "name": "Consulta Cliente por CPF (público)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/consulta-cliente/?identificador=37065727040",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "consulta-cliente", ""],
+              "query": [
+                {
+                  "key": "identificador",
+                  "value": "37065727040",
+                  "description": "CPF de Ana Costa"
+                }
+              ]
+            },
+            "description": "Endpoint PÚBLICO. Consulta a OS mais recente pelo CPF do cliente."
+          }
+        },
+        {
+          "name": "ERRO - Consulta sem identificador",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/consulta-cliente/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "consulta-cliente", ""]
+            },
+            "description": "Deve retornar 400 — identificador é obrigatório."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Itens de Peças (OS)",
+      "description": "Adiciona/remove peças de uma OS. Ao criar, o estoque é baixado automaticamente e o valor_total da OS é recalculado.",
+      "item": [
+        {
+          "name": "Listar Todos os Itens",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/itens-pecas/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "itens-pecas", ""]
+            }
+          }
+        },
+        {
+          "name": "Buscar Item por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/itens-pecas/6/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "itens-pecas", "6", ""]
+            },
+            "description": "Retorna o item com `total_item` calculado (peca.valor_unitario × quantidade)."
+          }
+        },
+        {
+          "name": "Adicionar Peça à OS",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"os\": 8,\n  \"peca\": 4,\n  \"quantidade\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/itens-pecas/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "itens-pecas", ""]
+            },
+            "description": "Adiciona 2x Filtro de Ar (R$ 35,00 each) à OS 8. Efeitos automáticos:\n- Estoque do Filtro de Ar decrementado em 2\n- valor_total da OS 8 recalculado"
+          }
+        },
+        {
+          "name": "Adicionar Velas à OS",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"os\": 12,\n  \"peca\": 10,\n  \"quantidade\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/itens-pecas/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "itens-pecas", ""]
+            },
+            "description": "Adiciona Vela de Ignição (R$ 95,00) à OS 12 da Transportes Brasil."
+          }
+        },
+        {
+          "name": "ERRO - Estoque Insuficiente",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"os\": 8,\n  \"peca\": 9,\n  \"quantidade\": 999\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/itens-pecas/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "itens-pecas", ""]
+            },
+            "description": "Amortecedor tem estoque 6. Pedir 999 deve retornar erro de estoque insuficiente."
+          }
+        },
+        {
+          "name": "Remover Peça da OS",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/itens-pecas/9/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "itens-pecas", "9", ""]
+            },
+            "description": "Remove o Filtro de Ar da OS 11."
+          }
+        }
+      ]
+    }
+  ]
+}
