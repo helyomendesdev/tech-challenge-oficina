@@ -10,22 +10,18 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# SEGURANÇA: Chave agora vem do ambiente ou de um arquivo .env (não fica no código)
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'mudar-em-producao-123')
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
+# SEGURANÇA: Debug desligado para evitar vazamento de informações do servidor
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False') == 'True'
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-dq64f!f!3+_z*d(g#1!_rt)tmcu*z0#zpq^=rz(haw3i%sngho'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.herokuapp.com']
 
 
 # Application definition
