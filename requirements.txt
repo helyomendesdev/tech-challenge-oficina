@@ -8,6 +8,7 @@ validate-docbr>=1.9,<2.0
 
 # Infraestrutura
 gunicorn>=22.0,<23.0
+whitenoise>=6.5,<7.0
 
 # Gestão segura de variáveis de ambiente
 python-decouple>=3.8,<4.0
