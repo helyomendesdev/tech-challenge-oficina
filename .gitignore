@@ -25,3 +25,10 @@ oficina_atividades.log
 relatorio_vulnerabilidades.txt
 seguranca_atendimento.txt
 seguranca_settings.txt
+# Artefatos de teste e cobertura
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Log gerado em runtime
+officina_atividades.log

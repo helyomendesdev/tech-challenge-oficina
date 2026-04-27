@@ -1,14 +1,7 @@
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-from .models import OrdemServico
-
-@receiver(post_save, sender=OrdemServico)
-def baixar_estoque_ao_executar(sender, instance, created, **kwargs):
-    # Verificamos se o status mudou para 'EXECUCAO'
-    if instance.status == 'EXECUCAO':
-        for item in instance.itens_pecas.all():
-            peca = item.peca
-            # Subtrai a quantidade usada da OS do estoque atual
-            peca.estoque_atual -= item.quantidade
-            peca.save()
-            print(f"DEBUG: Baixa de {item.quantidade} unidade(s) de {peca.nome} realizada.")
+# C3 CORRIGIDO: Arquivo de signals limpo.
+# A baixa de estoque era feita AQUI e também em ItemPecaOS.save(), causando duplo débito.
+# A responsabilidade de debitar/devolver estoque pertence exclusivamente ao ItemPecaOS
+# (via save() e delete()), que é a fonte de verdade para essa regra de negócio.
+#
+# O signal de recálculo de total por M2M (serviços) vive em models.py, junto
+# com o modelo OrdemServico, para manter a coesão.

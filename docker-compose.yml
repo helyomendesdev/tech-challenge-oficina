@@ -4,30 +4,46 @@ services:
     container_name: oficina_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    env_file:
+      - .env # C5: credenciais lidas do .env, não hardcoded
     environment:
-      - POSTGRES_DB=oficina_db
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin_pass
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
+    # M5: healthcheck para garantir que o banco está pronto antes do app subir
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
 
   web:
     build: .
     container_name: oficina_app
+    # M4: gunicorn em vez de runserver (production-ready)
     command: >
       sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
+             python manage.py collectstatic --noinput &&
+             gunicorn app.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60"
     volumes:
       - .:/app
+      - static_volume:/app/staticfiles
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      - POSTGRES_DB=oficina_db
-      - POSTGRES_USER=admin
-      - POSTGRES_PASSWORD=admin_pass
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - DB_HOST=db
     depends_on:
-      - db
+      db:
+        condition: service_healthy # M5: aguarda o banco estar saudável
 
 volumes:
   postgres_data:
+  static_volume:
