@@ -346,3 +346,56 @@ class ExceptionHandlerTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertIn('mensagem', response.data)
         self.assertIsInstance(response.data['mensagem'], str)
+
+    def test_criar_cliente_com_tamanho_documento_invalido(self):
+        payload = {'nome': 'Teste', 'documento': '123', 'email': 'a@a.com', 'telefone': '11'}
+        response = self.client.post('/api/v1/clientes/', payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_criar_cliente_com_cnpj_invalido(self):
+        payload = {'nome': 'Teste CNPJ', 'documento': '11.111.111/1111-11', 'email': 'b@b.com', 'telefone': '11'}
+        response = self.client.post('/api/v1/clientes/', payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_atualizar_cliente_mesmo_documento(self):
+        cliente = criar_cliente()
+        payload = {'nome': 'Nome Atualizado', 'documento': cliente.documento}
+        response = self.client.patch(f'/api/v1/clientes/{cliente.id}/', payload)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+
+class VeiculoAPITest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(username='tecnico_veiculo', password='senha@123')
+        self.client.force_authenticate(user=self.user)
+        self.cliente = criar_cliente()
+
+    def test_criar_veiculo_placa_upper(self):
+        payload = {'cliente': self.cliente.id, 'placa': 'abc1234', 'marca': 'VW', 'modelo': 'Gol', 'ano': 2020}
+        response = self.client.post('/api/v1/veiculos/', payload)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['placa'], 'ABC1234')
+
+
+class ItemPecaOSAPITest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(username='tecnico_item', password='senha@123')
+        self.client.force_authenticate(user=self.user)
+        self.cliente = criar_cliente()
+        self.veiculo = criar_veiculo(self.cliente)
+        self.os = OrdemServico.objects.create(cliente=self.cliente, veiculo=self.veiculo)
+        self.peca = criar_peca(estoque_atual=10)
+
+    def test_adicionar_peca_estoque_insuficiente(self):
+        payload = {'os': self.os.id, 'peca': self.peca.id, 'quantidade': 11}
+        response = self.client.post('/api/v1/itens-pecas/', payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_atualizar_peca_estoque_insuficiente(self):
+        item = ItemPecaOS.objects.create(os=self.os, peca=self.peca, quantidade=5)
+        self.peca.refresh_from_db()  # estoque_atual goes to 5 due to signals/save
+        payload = {'quantidade': 15}
+        response = self.client.patch(f'/api/v1/itens-pecas/{item.id}/', payload)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
