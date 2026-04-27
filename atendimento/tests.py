@@ -126,7 +126,7 @@ class OrdemServicoModelTest(TestCase):
 class OrdemServicoAPITest(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username='tecnico', password='senha@123')
+        self.user = User.objects.create_user(username='tecnico', password='senha@123')  # nosec B106
         self.client.force_authenticate(user=self.user)
 
         self.cliente = criar_cliente()
@@ -197,7 +197,7 @@ class OrdemServicoAPITest(TestCase):
 class ClienteAPITest(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username='tecnico', password='senha@123')
+        self.user = User.objects.create_user(username='tecnico', password='senha@123')  # nosec B106
         self.client.force_authenticate(user=self.user)
 
     def test_criar_cliente_com_cpf_valido(self):
@@ -240,7 +240,7 @@ class ClienteAPITest(TestCase):
 class FiltroOrdemServicoTest(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username='tecnico', password='senha@123')
+        self.user = User.objects.create_user(username='tecnico', password='senha@123')  # nosec B106
         self.client.force_authenticate(user=self.user)
 
         self.cliente = criar_cliente()
@@ -312,7 +312,7 @@ class FiltroOrdemServicoTest(TestCase):
 class ExceptionHandlerTest(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username='tecnico', password='senha@123')
+        self.user = User.objects.create_user(username='tecnico', password='senha@123')  # nosec B106
         self.client.force_authenticate(user=self.user)
 
     def test_erro_validacao_retorna_campo_estruturado(self):
@@ -367,7 +367,7 @@ class ExceptionHandlerTest(TestCase):
 class VeiculoAPITest(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username='tecnico_veiculo', password='senha@123')
+        self.user = User.objects.create_user(username='tecnico_veiculo', password='senha@123')  # nosec B106
         self.client.force_authenticate(user=self.user)
         self.cliente = criar_cliente()
 
@@ -381,7 +381,7 @@ class VeiculoAPITest(TestCase):
 class ItemPecaOSAPITest(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user(username='tecnico_item', password='senha@123')
+        self.user = User.objects.create_user(username='tecnico_item', password='senha@123')  # nosec B106
         self.client.force_authenticate(user=self.user)
         self.cliente = criar_cliente()
         self.veiculo = criar_veiculo(self.cliente)
