@@ -7,9 +7,10 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 ![DRF](https://img.shields.io/badge/DRF-3.15-red?style=flat)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?style=flat&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)
-![Cobertura](https://img.shields.io/badge/Cobertura-91%25-brightgreen?style=flat)
-![Testes](https://img.shields.io/badge/Testes-30%20passando-brightgreen?style=flat)
+![Cobertura](https://img.shields.io/badge/Cobertura-92%25-brightgreen?style=flat)
+![Testes](https://img.shields.io/badge/Testes-36%20passando-brightgreen?style=flat)
 ![Bandit](https://img.shields.io/badge/Bandit-0%20High%2FMedium-brightgreen?style=flat)
+![OWASP](https://img.shields.io/badge/OWASP%20Top%2010-Conformante-brightgreen?style=flat)
 
 ---
 
@@ -29,6 +30,7 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 - [Formato de Erros](#formato-de-erros)
 - [Testes](#testes)
 - [Estrutura do Projeto](#estrutura-do-projeto)
+- [Qualidade e Segurança](#qualidade-e-segurança)
 
 ---
 
@@ -429,10 +431,11 @@ bandit -r atendimento/ app/ --severity-level medium
 
 | Métrica | Valor |
 |---|---|
-| Total de testes | **30 passando** |
-| Cobertura geral | **91%** |
+| Total de testes | **36 passando** |
+| Cobertura geral | **92%** |
 | Bandit (High) | **0** |
 | Bandit (Medium) | **0** |
+| OWASP Top 10 | **9/9 conformantes** |
 
 Os testes cobrem:
 
@@ -442,6 +445,10 @@ Os testes cobrem:
 - **Filtros:** Filtro por status, cliente, nome parcial, estoque mínimo, ordenação
 - **Erros:** Formato estruturado por campo (400), mensagem simples (401, 404)
 - **Clientes:** CPF válido/inválido, duplicidade de documento
+- **Veículos:** Normalização de placa para maiúsculas
+- **Itens de Peças:** Estoque insuficiente em inserção e atualização
+
+> 📄 Relatório completo de qualidade e segurança: [docs/relatorio_qualidade_seguranca.md](docs/relatorio_qualidade_seguranca.md)
 
 ---
 
@@ -488,7 +495,8 @@ tech-challenge-fase-1-oficina/
 │       ├── initial_data.json    # Dado base (1 cliente, 1 veículo...)
 │       └── seed_data.json       # Dados de exemplo para desenvolvimento
 ├── docs/
-│   └── images/                  # Diagramas e screenshots da API
+│   ├── images/                  # Diagramas e screenshots da API
+│   └── relatorio_qualidade_seguranca.md  # Relatório SAST (Bandit) + OWASP Top 10
 ├── docker-compose.yml           # PostgreSQL + Gunicorn (healthcheck incluído)
 ├── Dockerfile
 ├── requirements.txt
@@ -498,6 +506,27 @@ tech-challenge-fase-1-oficina/
 ├── postman_collection.json      # Collection Postman completa
 └── postman_environment.json     # Environment Postman (local)
 ```
+
+---
+
+## Qualidade e Segurança
+
+A aplicação passa por análise estática de segurança (SAST via **Bandit**) e mapeamento contra o **OWASP Top 10 (2021)** a cada ciclo de desenvolvimento.
+
+| Dimensão | Resultado |
+|---|---|
+| Cobertura de testes | **92 %** (meta ≥ 80 %) |
+| Testes passando | **36 / 36** |
+| Issues High/Medium (Bandit) | **0** |
+| OWASP Top 10 | **9 / 9 categorias conformantes** |
+
+📄 **[Ver relatório completo → docs/relatorio_qualidade_seguranca.md](docs/relatorio_qualidade_seguranca.md)**
+
+O relatório detalha:
+- Análise SAST item a item com CWE referenciado
+- Avaliação de cada categoria OWASP Top 10
+- Métricas de cobertura por módulo
+- Code smells identificados e plano de remediação priorizado
 
 ---
 
