@@ -1,5 +1,5 @@
 import django_filters
-from .models import OrdemServico, Cliente, Veiculo, Peca
+from .models import OrdemServico, Cliente, Peca
 
 
 class OrdemServicoFilter(django_filters.FilterSet):

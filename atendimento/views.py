@@ -1,7 +1,5 @@
 from rest_framework import viewsets
-from rest_framework.filters import SearchFilter, OrderingFilter
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
-from django_filters.rest_framework import DjangoFilterBackend
 from .models import Cliente, Veiculo, OrdemServico, Servico, Peca, ItemPecaOS
 from .serializers import (
     ClienteSerializer,
@@ -19,15 +17,36 @@ from rest_framework.response import Response
 from django.db.models import Q
 
 
+# ---------------------------------------------------------------------------
+# Mixin de isolamento por usuário (OWASP A01)
+# ---------------------------------------------------------------------------
+
+class OwnedQuerySetMixin:
+    """
+    Filtra o queryset para retornar apenas objetos criados pelo usuário logado.
+    Superusuários (staff) enxergam todos os registros.
+    """
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user and user.is_authenticated and not user.is_staff:
+            qs = qs.filter(created_by=user)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
 @extend_schema_view(
     list=extend_schema(description=(
-        "Lista clientes cadastrados. "
+        "Lista clientes cadastrados pelo usuário logado. "
         "Filtros: ?nome=joão (parcial) · ?documento=12345678901. "
         "Busca: ?search=<texto>. Ordem: ?ordering=nome,-criado_em."
     )),
     create=extend_schema(description="Cadastra um novo cliente no sistema da oficina.")
 )
-class ClienteViewSet(viewsets.ModelViewSet):
+class ClienteViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
     filterset_class = ClienteFilter
@@ -36,7 +55,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
     ordering = ['nome']
 
 
-class VeiculoViewSet(viewsets.ModelViewSet):
+class VeiculoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = Veiculo.objects.select_related('cliente').all()
     serializer_class = VeiculoSerializer
     search_fields = ['placa', 'marca', 'modelo']
@@ -44,7 +63,7 @@ class VeiculoViewSet(viewsets.ModelViewSet):
     ordering = ['placa']
 
 
-class ServicoViewSet(viewsets.ModelViewSet):
+class ServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = Servico.objects.all()
     serializer_class = ServicoSerializer
     search_fields = ['descricao']
@@ -54,13 +73,13 @@ class ServicoViewSet(viewsets.ModelViewSet):
 
 @extend_schema_view(
     list=extend_schema(description=(
-        "Lista peças em estoque. "
+        "Lista peças em estoque cadastradas pelo usuário logado. "
         "Filtros: ?nome=pastilha · ?estoque_min=5 · ?estoque_zerado=true. "
         "Busca: ?search=<texto>. Ordem: ?ordering=nome,-estoque_atual."
     )),
     retrieve=extend_schema(description="Busca detalhes de uma peça específica e seu saldo atual.")
 )
-class PecaViewSet(viewsets.ModelViewSet):
+class PecaViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = Peca.objects.all()
     serializer_class = PecaSerializer
     filterset_class = PecaFilter
@@ -71,7 +90,7 @@ class PecaViewSet(viewsets.ModelViewSet):
 
 @extend_schema_view(
     list=extend_schema(description=(
-        "Lista Ordens de Serviço. "
+        "Lista Ordens de Serviço do usuário logado. "
         "Filtros: ?status=EXECUCAO · ?status=RECEBIDA&status=DIAGNOSTICO · "
         "?cliente=5 · ?veiculo=3 · ?data_abertura_after=2026-01-01 · "
         "?valor_total_min=500 · ?valor_total_max=2000. "
@@ -80,7 +99,7 @@ class PecaViewSet(viewsets.ModelViewSet):
     create=extend_schema(description="Abre uma nova OS. O valor total inicial será calculado automaticamente."),
     retrieve=extend_schema(description="Busca detalhes da OS, incluindo o valor total atualizado (Serviços + Peças).")
 )
-class OrdemServicoViewSet(viewsets.ModelViewSet):
+class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = (
         OrdemServico.objects
         .select_related('cliente', 'veiculo')
@@ -113,7 +132,7 @@ class OrdemServicoViewSet(viewsets.ModelViewSet):
         methods=['get'],
         url_path='consulta-cliente',
         permission_classes=[AllowAny],
-        throttle_classes=[ConsultaClienteThrottle],  # Rate limit: 30/hora por IP
+        throttle_classes=[ConsultaClienteThrottle],
     )
     def consulta_cliente(self, request):
         identificador = request.query_params.get('identificador')
@@ -155,7 +174,7 @@ class OrdemServicoViewSet(viewsets.ModelViewSet):
         description="Adiciona uma peça à OS. Aciona a baixa automática no estoque e recalcula o total da OS."
     )
 )
-class ItemPecaOSViewSet(viewsets.ModelViewSet):
+class ItemPecaOSViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = ItemPecaOS.objects.select_related('peca', 'os').all()
     serializer_class = ItemPecaOSSerializer
     ordering_fields = ['quantidade', 'peca__nome']

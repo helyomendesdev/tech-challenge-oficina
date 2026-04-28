@@ -19,6 +19,9 @@ django-cors-headers>=4.3,<5.0
 # Filtros avançados nos endpoints de listagem
 django-filter>=24.0,<25.0
 
+# Content Security Policy
+django-csp>=3.8,<4.0
+
 # Análise de segurança
 bandit>=1.7,<2.0
 

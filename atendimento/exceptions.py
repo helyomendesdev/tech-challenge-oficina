@@ -4,39 +4,55 @@ from rest_framework import status
 from django.conf import settings
 
 
+def _formatar_string(data):
+    """Mantém strings de erro como estão."""
+    return data
+
+
+def _formatar_lista(data):
+    """Junta lista de mensagens em uma única string."""
+    return " | ".join(str(item) for item in data)
+
+
+def _formatar_campo(mensagens):
+    """Formata o valor de um campo de erro (list, dict ou escalar)."""
+    if isinstance(mensagens, list):
+        return " | ".join(str(m) for m in mensagens)
+    if isinstance(mensagens, dict):
+        return _formatar_dict(mensagens)
+    return str(mensagens)
+
+
+def _formatar_dict(data):
+    """
+    Converte dict de erros do DRF em formato estruturado.
+
+    Trata o campo especial 'detail' (401, 403, 404) recursivamente.
+    """
+    erros_por_campo = {}
+    for campo, mensagens in data.items():
+        if campo == 'detail':
+            return _formatar_erros(mensagens)
+        erros_por_campo[campo] = _formatar_campo(mensagens)
+    return erros_por_campo
+
+
 def _formatar_erros(data):
     """
-    Converte os dados de erro do DRF em um formato estruturado e legível.
+    Dispatcher que converte qualquer tipo de dado de erro em formato legível.
 
     Casos tratados:
-      - String simples:  "Não autenticado."  →  mantém como string
-      - Lista de strings: ["campo obrigatório"]  →  junta em string
-      - Dict de campos:  {"nome": ["obrigatório"], "email": ["inválido"]}
-                         →  {"nome": "obrigatório", "email": "inválido"}
-      - Dict aninhado (ex.: serializers nested):  flattened recursivamente
+      - String simples:  mantém como string
+      - Lista de strings: junta em string
+      - Dict de campos: retorna dict estruturado
+      - Dict aninhado (nested serializers): flattened recursivamente
     """
     if isinstance(data, str):
-        return data
-
+        return _formatar_string(data)
     if isinstance(data, list):
-        # Lista de mensagens de erro (ex.: erros de campo único)
-        return " | ".join(str(item) for item in data)
-
+        return _formatar_lista(data)
     if isinstance(data, dict):
-        # Erros por campo — retorna dict estruturado
-        erros_por_campo = {}
-        for campo, mensagens in data.items():
-            if campo == 'detail':
-                # Campo especial do DRF (ex.: 401, 403, 404)
-                return _formatar_erros(mensagens)
-            if isinstance(mensagens, list):
-                erros_por_campo[campo] = " | ".join(str(m) for m in mensagens)
-            elif isinstance(mensagens, dict):
-                erros_por_campo[campo] = _formatar_erros(mensagens)
-            else:
-                erros_por_campo[campo] = str(mensagens)
-        return erros_por_campo
-
+        return _formatar_dict(data)
     return str(data)
 
 
@@ -63,17 +79,14 @@ def custom_exception_handler(exc, context):
         }
 
         if isinstance(erros_formatados, dict):
-            # Erros de validação por campo → retorna em 'campos'
             body['mensagem'] = 'Erro de validação. Verifique os campos informados.'
             body['campos'] = erros_formatados
         else:
-            # Erro geral (auth, permissão, not found etc.) → retorna em 'mensagem'
             body['mensagem'] = erros_formatados
 
         response.data = body
 
     else:
-        # Erros inesperados (exceções não tratadas pelo DRF)
         body = {
             'erro': True,
             'status_code': 500,

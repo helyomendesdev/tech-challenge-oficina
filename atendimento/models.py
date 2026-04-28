@@ -1,10 +1,17 @@
 from django.db import models
 from django.core.exceptions import ValidationError
-from django.utils import timezone  # C1: import que estava faltando (causava NameError)
+from django.utils import timezone
+from django.contrib.auth.models import User
 from validate_docbr import CPF, CNPJ
 import re
-from django.db.models.signals import m2m_changed
+from django.db.models.signals import m2m_changed, post_save, post_delete
 from django.dispatch import receiver
+import logging
+
+# ---------------------------------------------------------------------------
+# Logger de auditoria de segurança (OWASP A09)
+# ---------------------------------------------------------------------------
+logger_security = logging.getLogger('security')
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +46,10 @@ class Cliente(models.Model):
     email = models.EmailField()
     telefone = models.CharField(max_length=20)
     criado_em = models.DateTimeField(auto_now_add=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='clientes_criados', verbose_name='Criado por'
+    )
 
     def __str__(self):
         return self.nome
@@ -50,6 +61,10 @@ class Veiculo(models.Model):
     marca = models.CharField(max_length=50)
     modelo = models.CharField(max_length=50)
     ano = models.PositiveIntegerField()
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='veiculos_criados', verbose_name='Criado por'
+    )
 
     def __str__(self):
         return f"{self.placa} - {self.modelo}"
@@ -58,6 +73,10 @@ class Veiculo(models.Model):
 class Servico(models.Model):
     descricao = models.CharField(max_length=255)
     valor_mao_de_obra = models.DecimalField(max_digits=10, decimal_places=2)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='servicos_criados', verbose_name='Criado por'
+    )
 
     def __str__(self):
         return self.descricao
@@ -67,6 +86,10 @@ class Peca(models.Model):
     nome = models.CharField(max_length=255)
     valor_unitario = models.DecimalField(max_digits=10, decimal_places=2)
     estoque_atual = models.IntegerField(default=0)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='pecas_criadas', verbose_name='Criado por'
+    )
 
     def __str__(self):
         return self.nome
@@ -90,17 +113,19 @@ class OrdemServico(models.Model):
     data_inicio_execucao = models.DateTimeField(null=True, blank=True)
     data_finalizacao = models.DateTimeField(null=True, blank=True)
     valor_total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='ordens_criadas', verbose_name='Criado por'
+    )
 
     def calcular_total(self):
         """Recalcula e persiste o valor_total da OS de forma segura (sem recursão)."""
         total_servicos = sum(s.valor_mao_de_obra for s in self.servicos.all())
         total_pecas = sum(item.total_item for item in self.itens_pecas.all())
         novo_total = total_servicos + total_pecas
-        # Usa update() para evitar disparar save() recursivamente
         OrdemServico.objects.filter(pk=self.pk).update(valor_total=novo_total)
 
     def save(self, *args, **kwargs):
-        # C1 CORRIGIDO: timezone agora está importado corretamente
         if self.status == 'EXECUCAO' and not self.data_inicio_execucao:
             self.data_inicio_execucao = timezone.now()
 
@@ -118,6 +143,10 @@ class ItemPecaOS(models.Model):
     os = models.ForeignKey(OrdemServico, related_name='itens_pecas', on_delete=models.CASCADE)
     peca = models.ForeignKey(Peca, on_delete=models.PROTECT)
     quantidade = models.PositiveIntegerField(default=1)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='itens_pecas_criados', verbose_name='Criado por'
+    )
 
     @property
     def total_item(self):
@@ -125,19 +154,17 @@ class ItemPecaOS(models.Model):
 
     def save(self, *args, **kwargs):
         if self.pk:
-            # UPDATE: ajusta a diferença de estoque entre a quantidade antiga e a nova
             item_original = ItemPecaOS.objects.get(pk=self.pk)
             diferenca = self.quantidade - item_original.quantidade
             if diferenca != 0:
                 if self.peca.estoque_atual < diferenca:
                     raise ValidationError(
                         f"Estoque insuficiente para a peça '{self.peca.nome}'. "
-                        f"Disponível: {self.peca.estoque_atual}, Incremento solicitado: {diferenca}"
+                        f"Disponível para incremento: {self.peca.estoque_atual}, solicitado: {diferenca}"
                     )
                 self.peca.estoque_atual -= diferenca
                 self.peca.save()
         else:
-            # INSERT: valida e debita o estoque completo
             if self.peca.estoque_atual < self.quantidade:
                 raise ValidationError(
                     f"Estoque insuficiente para a peça '{self.peca.nome}'. "
@@ -150,7 +177,6 @@ class ItemPecaOS(models.Model):
         self.os.calcular_total()
 
     def delete(self, *args, **kwargs):
-        # Devolve ao estoque quando a peça é removida da OS
         self.peca.estoque_atual += self.quantidade
         self.peca.save()
         super().delete(*args, **kwargs)
@@ -169,3 +195,63 @@ def atualizar_total_os_servicos(sender, instance, action, **kwargs):
     """Recalcula o total da OS sempre que um serviço é adicionado ou removido."""
     if action in ["post_add", "post_remove", "post_clear"]:
         instance.calcular_total()
+
+
+# ---------------------------------------------------------------------------
+# Signals de auditoria de segurança (OWASP A09)
+# ---------------------------------------------------------------------------
+
+@receiver(post_save, sender=OrdemServico)
+def audit_log_os_save(sender, instance, created, **kwargs):
+    """Loga criação e alterações de status de Ordens de Serviço."""
+    if created:
+        logger_security.info(
+            "os_created",
+            extra={
+                "os_id": instance.id,
+                "status": instance.status,
+                "user_id": instance.created_by_id,
+                "cliente_id": instance.cliente_id,
+                "veiculo_id": instance.veiculo_id,
+            }
+        )
+    else:
+        logger_security.info(
+            "os_updated",
+            extra={
+                "os_id": instance.id,
+                "status": instance.status,
+                "user_id": instance.created_by_id,
+            }
+        )
+
+
+@receiver(post_save, sender=ItemPecaOS)
+def audit_log_item_peca_save(sender, instance, created, **kwargs):
+    """Loga adição e alteração de peças em OS (movimentação de estoque)."""
+    acao = "item_peca_created" if created else "item_peca_updated"
+    logger_security.info(
+        acao,
+        extra={
+            "item_id": instance.id,
+            "os_id": instance.os_id,
+            "peca_id": instance.peca_id,
+            "quantidade": instance.quantidade,
+            "user_id": instance.created_by_id,
+        }
+    )
+
+
+@receiver(post_delete, sender=ItemPecaOS)
+def audit_log_item_peca_delete(sender, instance, **kwargs):
+    """Loga remoção de peças da OS (devolução de estoque)."""
+    logger_security.info(
+        "item_peca_deleted",
+        extra={
+            "item_id": instance.id,
+            "os_id": instance.os_id,
+            "peca_id": instance.peca_id,
+            "quantidade": instance.quantidade,
+            "user_id": instance.created_by_id,
+        }
+    )
