@@ -199,12 +199,20 @@ CORS_ALLOWED_ORIGINS = config(
 # Content Security Policy (CSP) — OWASP A05
 # ---------------------------------------------------------------------------
 
+# Domínios CDN usados por drf-spectacular (swagger-ui / redoc)
+_CSP_CDNS = (
+    'https://unpkg.com',
+    'https://cdn.jsdelivr.net',
+    'https://fonts.googleapis.com',
+    'https://fonts.gstatic.com',
+)
+
 _CSP_SELF = "'self'"
 CSP_DEFAULT_SRC = (_CSP_SELF,)
-CSP_SCRIPT_SRC = (_CSP_SELF,)
-CSP_STYLE_SRC = (_CSP_SELF, "'unsafe-inline'")  # swagger-ui precisa de inline styles
+CSP_SCRIPT_SRC = (_CSP_SELF, "'unsafe-inline'") + _CSP_CDNS  # swagger-ui usa script inline na inicialização
+CSP_STYLE_SRC = (_CSP_SELF, "'unsafe-inline'") + _CSP_CDNS  # swagger-ui precisa de inline styles
 CSP_IMG_SRC = (_CSP_SELF, "data:", "blob:")
-CSP_FONT_SRC = (_CSP_SELF,)
+CSP_FONT_SRC = (_CSP_SELF,) + _CSP_CDNS
 CSP_CONNECT_SRC = (_CSP_SELF,)
 CSP_FRAME_ANCESTORS = ("'none'",)
 CSP_BASE_URI = (_CSP_SELF,)
