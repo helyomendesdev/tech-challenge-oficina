@@ -270,7 +270,7 @@
       "data_inicio_execucao": null,
       "data_finalizacao": null,
       "valor_total": "120.00",
-      "servicos": [2]
+      "servicos": []
     }
   },
   {
@@ -284,7 +284,7 @@
       "data_inicio_execucao": null,
       "data_finalizacao": null,
       "valor_total": "90.00",
-      "servicos": [7]
+      "servicos": []
     }
   },
   {
@@ -297,8 +297,8 @@
       "data_abertura": "2026-03-15T10:00:00.000Z",
       "data_inicio_execucao": null,
       "data_finalizacao": null,
-      "valor_total": "550.00",
-      "servicos": [3, 5]
+      "valor_total": "790.00",
+      "servicos": []
     }
   },
   {
@@ -312,7 +312,7 @@
       "data_inicio_execucao": "2026-03-21T08:00:00.000Z",
       "data_finalizacao": null,
       "valor_total": "360.00",
-      "servicos": [2]
+      "servicos": []
     }
   },
   {
@@ -326,7 +326,7 @@
       "data_inicio_execucao": "2026-03-23T09:00:00.000Z",
       "data_finalizacao": "2026-03-24T17:00:00.000Z",
       "valor_total": "630.00",
-      "servicos": [8]
+      "servicos": []
     }
   },
   {
@@ -340,7 +340,7 @@
       "data_inicio_execucao": "2026-03-26T08:00:00.000Z",
       "data_finalizacao": "2026-03-27T16:00:00.000Z",
       "valor_total": "265.00",
-      "servicos": [4, 6]
+      "servicos": []
     }
   },
   {
@@ -354,7 +354,7 @@
       "data_inicio_execucao": null,
       "data_finalizacao": null,
       "valor_total": "350.00",
-      "servicos": [3]
+      "servicos": []
     }
   },
   {
@@ -363,7 +363,8 @@
     "fields": {
       "os": 9,
       "peca": 3,
-      "quantidade": 2
+      "quantidade": 2,
+      "quantidade_utilizada": 2
     }
   },
   {
@@ -372,7 +373,8 @@
     "fields": {
       "os": 10,
       "peca": 5,
-      "quantidade": 1
+      "quantidade": 1,
+      "quantidade_utilizada": 1
     }
   },
   {
@@ -381,7 +383,8 @@
     "fields": {
       "os": 10,
       "peca": 6,
-      "quantidade": 4
+      "quantidade": 4,
+      "quantidade_utilizada": 4
     }
   },
   {
@@ -390,6 +393,161 @@
     "fields": {
       "os": 11,
       "peca": 4,
+      "quantidade": 1,
+      "quantidade_utilizada": 1
+    }
+  },
+  {
+    "model": "atendimento.itempecaos",
+    "pk": 10,
+    "fields": {
+      "os": 8,
+      "peca": 3,
+      "quantidade": 2,
+      "quantidade_utilizada": 0
+    }
+  },
+  {
+    "model": "atendimento.itemservicoos",
+    "pk": 3,
+    "fields": {
+      "ordem_servico": 6,
+      "servico": 2,
+      "status": "PENDENTE",
+      "data_inicio": null,
+      "data_finalizacao": null,
+      "created_by": null
+    }
+  },
+  {
+    "model": "atendimento.itemservicoos",
+    "pk": 4,
+    "fields": {
+      "ordem_servico": 7,
+      "servico": 7,
+      "status": "PENDENTE",
+      "data_inicio": null,
+      "data_finalizacao": null,
+      "created_by": null
+    }
+  },
+  {
+    "model": "atendimento.itemservicoos",
+    "pk": 5,
+    "fields": {
+      "ordem_servico": 8,
+      "servico": 3,
+      "status": "PENDENTE",
+      "data_inicio": null,
+      "data_finalizacao": null,
+      "created_by": null
+    }
+  },
+  {
+    "model": "atendimento.itemservicoos",
+    "pk": 6,
+    "fields": {
+      "ordem_servico": 8,
+      "servico": 5,
+      "status": "PENDENTE",
+      "data_inicio": null,
+      "data_finalizacao": null,
+      "created_by": null
+    }
+  },
+  {
+    "model": "atendimento.itemservicoos",
+    "pk": 7,
+    "fields": {
+      "ordem_servico": 9,
+      "servico": 2,
+      "status": "EM_EXECUCAO",
+      "data_inicio": "2026-03-21T08:00:00.000Z",
+      "data_finalizacao": null,
+      "created_by": null
+    }
+  },
+  {
+    "model": "atendimento.itemservicoos",
+    "pk": 8,
+    "fields": {
+      "ordem_servico": 10,
+      "servico": 8,
+      "status": "CONCLUIDO",
+      "data_inicio": "2026-03-23T09:00:00.000Z",
+      "data_finalizacao": "2026-03-24T17:00:00.000Z",
+      "created_by": null
+    }
+  },
+  {
+    "model": "atendimento.itemservicoos",
+    "pk": 9,
+    "fields": {
+      "ordem_servico": 11,
+      "servico": 4,
+      "status": "CONCLUIDO",
+      "data_inicio": "2026-03-26T08:00:00.000Z",
+      "data_finalizacao": "2026-03-27T10:00:00.000Z",
+      "created_by": null
+    }
+  },
+  {
+    "model": "atendimento.itemservicoos",
+    "pk": 10,
+    "fields": {
+      "ordem_servico": 11,
+      "servico": 6,
+      "status": "CONCLUIDO",
+      "data_inicio": "2026-03-26T13:00:00.000Z",
+      "data_finalizacao": "2026-03-27T16:00:00.000Z",
+      "created_by": null
+    }
+  },
+  {
+    "model": "atendimento.itemservicoos",
+    "pk": 11,
+    "fields": {
+      "ordem_servico": 12,
+      "servico": 3,
+      "status": "PENDENTE",
+      "data_inicio": null,
+      "data_finalizacao": null,
+      "created_by": null
+    }
+  },
+  {
+    "model": "atendimento.consumoitemservico",
+    "pk": 1,
+    "fields": {
+      "item_servico_os": 7,
+      "item_peca_os": 6,
+      "quantidade": 2
+    }
+  },
+  {
+    "model": "atendimento.consumoitemservico",
+    "pk": 2,
+    "fields": {
+      "item_servico_os": 8,
+      "item_peca_os": 7,
+      "quantidade": 1
+    }
+  },
+  {
+    "model": "atendimento.consumoitemservico",
+    "pk": 3,
+    "fields": {
+      "item_servico_os": 8,
+      "item_peca_os": 8,
+      "quantidade": 4
+    }
+  },
+  {
+    "model": "atendimento.consumoitemservico",
+    "pk": 4,
+    "fields": {
+      "item_servico_os": 10,
+      "item_peca_os": 9,
       "quantidade": 1
     }
   }

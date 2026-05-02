@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.contrib.auth.models import User
 from validate_docbr import CPF, CNPJ
 import re
-from django.db.models.signals import m2m_changed, post_save, post_delete
+from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 import logging
 
@@ -108,7 +108,7 @@ class OrdemServico(models.Model):
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT)
     veiculo = models.ForeignKey(Veiculo, on_delete=models.PROTECT)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RECEBIDA')
-    servicos = models.ManyToManyField(Servico, blank=True)
+    servicos = models.ManyToManyField(Servico, through='ItemServicoOS', blank=True)
     data_abertura = models.DateTimeField(auto_now_add=True)
     data_inicio_execucao = models.DateTimeField(null=True, blank=True)
     data_finalizacao = models.DateTimeField(null=True, blank=True)
@@ -143,6 +143,7 @@ class ItemPecaOS(models.Model):
     os = models.ForeignKey(OrdemServico, related_name='itens_pecas', on_delete=models.CASCADE)
     peca = models.ForeignKey(Peca, on_delete=models.PROTECT)
     quantidade = models.PositiveIntegerField(default=1)
+    quantidade_utilizada = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='itens_pecas_criados', verbose_name='Criado por'
@@ -186,15 +187,68 @@ class ItemPecaOS(models.Model):
         return f"{self.quantidade}x {self.peca.nome} (OS {self.os_id})"
 
 
+class ItemServicoOS(models.Model):
+    STATUS_CHOICES = [
+        ('PENDENTE', 'Pendente'),
+        ('EM_EXECUCAO', 'Em Execução'),
+        ('CONCLUIDO', 'Concluído'),
+    ]
+    ordem_servico = models.ForeignKey(
+        OrdemServico, on_delete=models.CASCADE, related_name='itens_servico'
+    )
+    servico = models.ForeignKey(
+        Servico, on_delete=models.PROTECT, related_name='itens_servico'
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDENTE')
+    data_inicio = models.DateTimeField(null=True, blank=True)
+    data_finalizacao = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='itens_servico_criados'
+    )
+
+    class Meta:
+        unique_together = [('ordem_servico', 'servico')]
+
+    @property
+    def tempo_execucao_minutos(self):
+        if self.data_inicio and self.data_finalizacao:
+            delta = self.data_finalizacao - self.data_inicio
+            return round(delta.total_seconds() / 60, 2)
+        return None
+
+    def __str__(self):
+        return f"OS {self.ordem_servico_id} - {self.servico.descricao} ({self.status})"
+
+
+class ConsumoItemServico(models.Model):
+    item_servico_os = models.ForeignKey(
+        ItemServicoOS, on_delete=models.CASCADE, related_name='consumos'
+    )
+    item_peca_os = models.ForeignKey(
+        ItemPecaOS, on_delete=models.PROTECT, related_name='consumos'
+    )
+    quantidade = models.PositiveIntegerField()
+
+    class Meta:
+        unique_together = [('item_servico_os', 'item_peca_os')]
+
+    def __str__(self):
+        return f"{self.quantidade}x {self.item_peca_os.peca.nome} → {self.item_servico_os}"
+
+
 # ---------------------------------------------------------------------------
-# Signals — C2 CORRIGIDO: um único receiver para m2m_changed (sem duplicatas)
+# Signals — recalculate OS total when a service item is added or removed
 # ---------------------------------------------------------------------------
 
-@receiver(m2m_changed, sender=OrdemServico.servicos.through)
-def atualizar_total_os_servicos(sender, instance, action, **kwargs):
-    """Recalcula o total da OS sempre que um serviço é adicionado ou removido."""
-    if action in ["post_add", "post_remove", "post_clear"]:
-        instance.calcular_total()
+@receiver(post_save, sender=ItemServicoOS)
+def atualizar_total_os_item_servico(sender, instance, **kwargs):
+    instance.ordem_servico.calcular_total()
+
+
+@receiver(post_delete, sender=ItemServicoOS)
+def atualizar_total_os_item_servico_delete(sender, instance, **kwargs):
+    instance.ordem_servico.calcular_total()
 
 
 # ---------------------------------------------------------------------------

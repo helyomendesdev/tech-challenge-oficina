@@ -45,6 +45,7 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - DB_HOST=db
+      - DJANGO_LOG_FILE=/tmp/oficina_atividades.log
     depends_on:
       db:
         condition: service_healthy  # M5: aguarda o banco estar saudável

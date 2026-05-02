@@ -2,7 +2,7 @@
   "info": {
     "name": "Oficina Mecânica API",
     "_postman_id": "oficina-api-v1",
-    "description": "Collection completa para testar a API do Tech Challenge Fase 1 - FIAP.\n\n**Como usar:**\n1. Importe também o arquivo `postman_environment.json`\n2. Selecione o environment \"Oficina Local\"\n3. Execute \"Obter Token\" primeiro — o token é salvo automaticamente\n4. Todas as demais requisições já usam o token automaticamente",
+    "description": "Collection completa para testar a API do Tech Challenge Fase 1 - FIAP.\n\n**Como usar:**\n1. Importe também o arquivo `postman_environment.json`\n2. Selecione o environment \"Oficina Local\"\n3. Execute \"Obter Token\" primeiro — o token é salvo automaticamente\n4. Todas as demais requisições já usam o token automaticamente\n\n**IDs de referência (seed_data):**\n- OS 8: AGUARDANDO — serviços pk=5 (Revisão, PENDENTE) e pk=6 (Pastilha, PENDENTE), peça pk=10\n- OS 9: EXECUCAO — serviço pk=7 (Alinhamento, EM_EXECUCAO), peça pk=6 (Pastilha×2, 100% utilizada)\n- OS 10: FINALIZADA — serviço pk=8 (Correia, CONCLUIDO) com 32h de execução",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -534,7 +534,7 @@
     },
     {
       "name": "Ordens de Serviço",
-      "description": "Fluxo completo de OS. Status: RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE",
+      "description": "CRUD de OS e transições de status. Status: RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE\n\nNota: o campo `servicos` na resposta é somente leitura. Para adicionar serviços a uma OS use a pasta 'Serviços por OS'.",
       "item": [
         {
           "name": "Listar Todas as OS",
@@ -556,11 +556,11 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "ordens-servico", "9", ""]
             },
-            "description": "OS 9 está em EXECUCAO com pastilhas de freio adicionadas."
+            "description": "OS 9 está em EXECUCAO com Alinhamento e Balanceamento em andamento e pastilhas consumidas."
           }
         },
         {
-          "name": "Abrir OS (só serviços)",
+          "name": "Criar OS",
           "request": {
             "method": "POST",
             "header": [
@@ -568,32 +568,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"cliente\": 3,\n  \"veiculo\": 4,\n  \"status\": \"RECEBIDA\",\n  \"servicos\": [2, 7]\n}"
+              "raw": "{\n  \"cliente\": 3,\n  \"veiculo\": 4,\n  \"status\": \"RECEBIDA\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "ordens-servico", ""]
             },
-            "description": "Cria uma OS com serviços já vinculados. `valor_total` é calculado automaticamente."
-          }
-        },
-        {
-          "name": "Abrir OS (sem serviços)",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"cliente\": 5,\n  \"veiculo\": 7,\n  \"status\": \"RECEBIDA\",\n  \"servicos\": []\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/ordens-servico/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", ""]
-            }
+            "description": "Cria uma OS. Serviços são adicionados depois via POST /ordens-servico/{id}/servicos/. O `valor_total` é calculado automaticamente."
           }
         },
         {
@@ -648,7 +630,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "ordens-servico", "6", ""]
             },
-            "description": "Ao mudar para EXECUCAO, o campo `data_inicio_execucao` é preenchido automaticamente."
+            "description": "Ao mudar para EXECUCAO, o campo `data_inicio_execucao` é preenchido automaticamente.\n\nNota: ao usar POST /servicos/{id}/iniciar/ no primeiro serviço da OS, a transição ocorre automaticamente."
           }
         },
         {
@@ -667,7 +649,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "ordens-servico", "6", ""]
             },
-            "description": "Ao finalizar, `data_finalizacao` é preenchida automaticamente."
+            "description": "Retorna 400 se houver serviços não CONCLUIDO ou peças com quantidade_utilizada < quantidade.\n\nNota: ao usar POST /servicos/{id}/finalizar/ no último serviço da OS, a transição ocorre automaticamente."
           }
         },
         {
@@ -686,25 +668,6 @@
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "ordens-servico", "6", ""]
             }
-          }
-        },
-        {
-          "name": "Adicionar Serviço à OS (PATCH)",
-          "request": {
-            "method": "PATCH",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"servicos\": [2, 4, 5]\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/ordens-servico/7/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "7", ""]
-            },
-            "description": "Atualiza a lista de serviços. O `valor_total` é recalculado automaticamente via signal."
           }
         },
         {
@@ -867,6 +830,254 @@
               "path": ["api", "v1", "itens-pecas", "9", ""]
             },
             "description": "Remove o Filtro de Ar da OS 11."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Serviços por OS",
+      "description": "Ciclo de vida de um serviço dentro de uma OS.\n\nFluxo completo:\n1. Adicionar serviço → POST /ordens-servico/{os_pk}/servicos/\n2. Iniciar execução (com ou sem peças) → POST /ordens-servico/{os_pk}/servicos/{id}/iniciar/\n3. Finalizar serviço → POST /ordens-servico/{os_pk}/servicos/{id}/finalizar/\n4. Ao finalizar o último serviço, a OS transita automaticamente para FINALIZADA\n\nTodos os endpoints são escopados pela OS — retornam 404 se a OS não pertencer ao usuário autenticado.",
+      "item": [
+        {
+          "name": "Listar Serviços da OS 8",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "8", "servicos", ""]
+            },
+            "description": "Lista os ItemServicoOS da OS 8 (AGUARDANDO). Mostra pk=5 (Revisão, PENDENTE) e pk=6 (Pastilha, PENDENTE)."
+          }
+        },
+        {
+          "name": "Buscar Serviço da OS por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/5/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "8", "servicos", "5", ""]
+            },
+            "description": "Detalhe do ItemServicoOS pk=5 (Revisão Completa, PENDENTE) na OS 8."
+          }
+        },
+        {
+          "name": "Adicionar Serviço à OS",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"servico\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/6/servicos/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "6", "servicos", ""]
+            },
+            "description": "Adiciona o serviço Troca de Óleo (pk=1) à OS 6 (RECEBIDA, João Silva). Retorna o ItemServicoOS com status PENDENTE."
+          }
+        },
+        {
+          "name": "Iniciar Serviço (sem peças)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/5/iniciar/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "8", "servicos", "5", "iniciar", ""]
+            },
+            "description": "Inicia o serviço Revisão Completa (ItemServicoOS pk=5) na OS 8.\n- Status muda de PENDENTE → EM_EXECUCAO\n- data_inicio preenchida com agora\n- Como é o primeiro serviço iniciado na OS, ela transita de AGUARDANDO → EXECUCAO"
+          }
+        },
+        {
+          "name": "Iniciar Serviço (com peças e data)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data_inicio\": \"2026-05-01T09:00:00Z\",\n  \"pecas\": [\n    { \"item_peca_os_id\": 10, \"quantidade\": 2 }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/6/iniciar/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "8", "servicos", "6", "iniciar", ""]
+            },
+            "description": "Inicia o serviço Troca de Pastilha (ItemServicoOS pk=6) na OS 8 com data personalizada e consumo de 2x Pastilha de Freio Dianteira (item_peca_os pk=10, qty disponível=2).\n- Cria ConsumoItemServico vinculando as peças ao serviço\n- Atualiza ItemPecaOS.quantidade_utilizada += 2\n- Valida que a peça pertence à OS e que há quantidade disponível"
+          }
+        },
+        {
+          "name": "Finalizar Serviço",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"data_finalizacao\": \"2026-05-01T17:00:00Z\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/9/servicos/7/finalizar/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "9", "servicos", "7", "finalizar", ""]
+            },
+            "description": "Finaliza o serviço Alinhamento e Balanceamento (ItemServicoOS pk=7, EM_EXECUCAO) na OS 9.\n- OS 9 tem apenas este serviço ativo → verificação de peças é executada\n- ItemPecaOS pk=6 (Pastilha×2) tem quantidade_utilizada=2 = quantidade → OK\n- Status muda para CONCLUIDO\n- OS 9 transita automaticamente para FINALIZADA"
+          }
+        },
+        {
+          "name": "Remover Serviço (PENDENTE)",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/6/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "8", "servicos", "6", ""]
+            },
+            "description": "Remove o ItemServicoOS pk=6 (Pastilha, PENDENTE) da OS 8. Só é permitido remover serviços com status PENDENTE."
+          }
+        },
+        {
+          "name": "ERRO - Iniciar serviço já iniciado",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/9/servicos/7/iniciar/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "9", "servicos", "7", "iniciar", ""]
+            },
+            "description": "ItemServicoOS pk=7 já está EM_EXECUCAO → deve retornar 400 'Serviço já foi iniciado ou concluído'."
+          }
+        },
+        {
+          "name": "ERRO - Quantidade de peça indisponível",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pecas\": [\n    { \"item_peca_os_id\": 10, \"quantidade\": 99 }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/5/iniciar/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "8", "servicos", "5", "iniciar", ""]
+            },
+            "description": "ItemPecaOS pk=10 tem quantidade=2, quantidade_utilizada=0 → disponível=2. Solicitar 99 deve retornar 400 'Quantidade indisponível'."
+          }
+        },
+        {
+          "name": "ERRO - Finalizar com peças não utilizadas",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/5/finalizar/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "8", "servicos", "5", "finalizar", ""]
+            },
+            "description": "ItemServicoOS pk=5 ainda está PENDENTE → deve retornar 400 'Serviço não está em execução'.\n\nSe o serviço estivesse EM_EXECUCAO mas a OS tivesse peças com quantidade_utilizada < quantidade, retornaria 400 'Existem peças não utilizadas na OS'."
+          }
+        },
+        {
+          "name": "ERRO - Remover serviço em execução",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/9/servicos/7/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "9", "servicos", "7", ""]
+            },
+            "description": "ItemServicoOS pk=7 está EM_EXECUCAO → deve retornar 400 'Não é possível remover serviço em execução ou concluído'."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Métricas de Serviço",
+      "description": "Endpoint de métricas por OS — retorna todos os serviços com tempo de execução e peças consumidas.\n\nUtilize o parâmetro `?servico={id}` para filtrar por tipo de serviço.\n\nCampos retornados por item:\n- `tempo_execucao_minutos`: null se não finalizado\n- `pecas_consumidas`: lista das peças consumidas pelo serviço (via ConsumoItemServico)",
+      "item": [
+        {
+          "name": "Métricas da OS 10 (todos os serviços)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/10/metricas/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "10", "metricas", ""]
+            },
+            "description": "OS 10 (FINALIZADA, Pedro Oliveira). Retorna o serviço Troca de Correia Dentada (CONCLUIDO, ~32h de execução) com as peças consumidas: 1x Correia Dentada e 4x Óleo 5W30."
+          }
+        },
+        {
+          "name": "Métricas da OS 10 (filtro por serviço)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/10/metricas/?servico=8",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "10", "metricas", ""],
+              "query": [
+                {
+                  "key": "servico",
+                  "value": "8",
+                  "description": "Filtra apenas o serviço Troca de Correia Dentada (pk=8)"
+                }
+              ]
+            },
+            "description": "Filtra as métricas da OS 10 para o serviço pk=8 (Troca de Correia Dentada). Útil para comparar o mesmo tipo de serviço entre múltiplas OS."
+          }
+        },
+        {
+          "name": "Métricas da OS 11 (serviços ENTREGUE)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/11/metricas/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "11", "metricas", ""]
+            },
+            "description": "OS 11 (ENTREGUE, Ana Costa). Dois serviços CONCLUIDO: Troca de Pneu (~26h) e Higienização de Ar-Condicionado (~27h). O serviço de Higienização consumiu 1x Filtro de Ar."
+          }
+        },
+        {
+          "name": "Métricas da OS 9 (serviço EM_EXECUCAO)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/9/metricas/",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "ordens-servico", "9", "metricas", ""]
+            },
+            "description": "OS 9 (EXECUCAO). O serviço Alinhamento está EM_EXECUCAO → `tempo_execucao_minutos` retorna null. Peças consumidas: 2x Pastilha de Freio Dianteira."
           }
         }
       ]

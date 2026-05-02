@@ -1,6 +1,8 @@
-from rest_framework import viewsets
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from rest_framework import viewsets, mixins, status as drf_status
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
-from .models import Cliente, Veiculo, OrdemServico, Servico, Peca, ItemPecaOS
+from .models import Cliente, Veiculo, OrdemServico, Servico, Peca, ItemPecaOS, ItemServicoOS, ConsumoItemServico
 from .serializers import (
     ClienteSerializer,
     VeiculoSerializer,
@@ -8,13 +10,17 @@ from .serializers import (
     ServicoSerializer,
     PecaSerializer,
     ItemPecaOSSerializer,
+    ItemServicoOSSerializer,
+    IniciarServicoSerializer,
+    FinalizarServicoSerializer,
+    MetricasItemServicoSerializer,
 )
 from .filters import OrdemServicoFilter, ClienteFilter, PecaFilter
 from .throttles import ConsultaClienteThrottle
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from django.db.models import Q
+from django.db.models import F, Q
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +174,25 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(os_list, many=True)
         return Response(serializer.data)
 
+    @action(detail=True, methods=['get'], url_path='metricas')
+    def metricas(self, request, pk=None):
+        os = self.get_object()
+        qs = (
+            ItemServicoOS.objects
+            .filter(ordem_servico=os)
+            .select_related('servico')
+            .prefetch_related('consumos__item_peca_os__peca')
+            .order_by('id')
+        )
+        servico_id = request.query_params.get('servico')
+        if servico_id is not None:
+            try:
+                qs = qs.filter(servico_id=int(servico_id))
+            except (ValueError, TypeError):
+                return Response({'erro': "'servico' deve ser um inteiro."}, status=drf_status.HTTP_400_BAD_REQUEST)
+        serializer = MetricasItemServicoSerializer(qs, many=True)
+        return Response(serializer.data)
+
 
 @extend_schema_view(
     create=extend_schema(
@@ -179,3 +204,158 @@ class ItemPecaOSViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     serializer_class = ItemPecaOSSerializer
     ordering_fields = ['quantidade', 'peca__nome']
     ordering = ['peca__nome']
+
+
+class ItemServicoOSViewSet(
+    mixins.CreateModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.ListModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = ItemServicoOSSerializer
+
+    def _get_os(self):
+        user = self.request.user
+        qs = OrdemServico.objects.all()
+        if not user.is_staff:
+            qs = qs.filter(created_by=user)
+        return get_object_or_404(qs, pk=self.kwargs['os_pk'])
+
+    def get_queryset(self):
+        os = self._get_os()
+        return ItemServicoOS.objects.filter(
+            ordem_servico=os
+        ).select_related('servico', 'ordem_servico').order_by('id')
+
+    def perform_create(self, serializer):
+        os = self._get_os()
+        serializer.save(ordem_servico=os, created_by=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.status != 'PENDENTE':
+            return Response(
+                {'erro': 'Não é possível remover serviço em execução ou concluído'},
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'])
+    def iniciar(self, request, os_pk=None, pk=None):
+        item = self.get_object()
+
+        if item.status != 'PENDENTE':
+            return Response(
+                {'erro': 'Serviço já foi iniciado ou concluído'},
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = IniciarServicoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data_inicio = serializer.validated_data.get('data_inicio') or timezone.now()
+        pecas_input = serializer.validated_data.get('pecas', [])
+
+        consumos_a_criar = []
+        for entrada in pecas_input:
+            try:
+                item_peca = ItemPecaOS.objects.get(
+                    pk=entrada['item_peca_os_id'], os=item.ordem_servico
+                )
+            except ItemPecaOS.DoesNotExist:
+                return Response(
+                    {'erro': f"Peça {entrada['item_peca_os_id']} não pertence a esta OS"},
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
+
+            disponivel = item_peca.quantidade - item_peca.quantidade_utilizada
+            if entrada['quantidade'] > disponivel:
+                return Response(
+                    {
+                        'erro': (
+                            f"Quantidade indisponível para '{item_peca.peca.nome}'. "
+                            f"Disponível: {disponivel}, solicitado: {entrada['quantidade']}"
+                        )
+                    },
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
+            consumos_a_criar.append((item_peca, entrada['quantidade']))
+
+        for item_peca, quantidade in consumos_a_criar:
+            ConsumoItemServico.objects.create(
+                item_servico_os=item,
+                item_peca_os=item_peca,
+                quantidade=quantidade,
+            )
+            ItemPecaOS.objects.filter(pk=item_peca.pk).update(
+                quantidade_utilizada=F('quantidade_utilizada') + quantidade
+            )
+
+        ItemServicoOS.objects.filter(pk=item.pk).update(
+            status='EM_EXECUCAO',
+            data_inicio=data_inicio,
+        )
+        item.refresh_from_db()
+
+        os = item.ordem_servico
+        if os.status == 'AGUARDANDO':
+            nenhum_outro_ativo = not ItemServicoOS.objects.filter(
+                ordem_servico=os, status__in=['EM_EXECUCAO', 'CONCLUIDO']
+            ).exclude(pk=item.pk).exists()
+            if nenhum_outro_ativo:
+                OrdemServico.objects.filter(pk=os.pk).update(
+                    status='EXECUCAO',
+                    data_inicio_execucao=timezone.now(),
+                )
+
+        return Response(self.get_serializer(item).data)
+
+    @action(detail=True, methods=['post'])
+    def finalizar(self, request, os_pk=None, pk=None):
+        item = self.get_object()
+
+        if item.status != 'EM_EXECUCAO':
+            return Response(
+                {'erro': 'Serviço não está em execução'},
+                status=drf_status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = FinalizarServicoSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data_finalizacao = serializer.validated_data.get('data_finalizacao') or timezone.now()
+        os = item.ordem_servico
+
+        ainda_ha_ativo = ItemServicoOS.objects.filter(
+            ordem_servico=os, status__in=['PENDENTE', 'EM_EXECUCAO']
+        ).exclude(pk=item.pk).exists()
+
+        if not ainda_ha_ativo:
+            pecas_nao_utilizadas = os.itens_pecas.exclude(
+                quantidade_utilizada=F('quantidade')
+            ).exists()
+            if pecas_nao_utilizadas:
+                return Response(
+                    {'erro': 'Existem peças não utilizadas na OS'},
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
+
+        ItemServicoOS.objects.filter(pk=item.pk).update(
+            status='CONCLUIDO',
+            data_finalizacao=data_finalizacao,
+        )
+        item.refresh_from_db()
+
+        # item is already CONCLUIDO in the DB (updated above), so no need to exclude(pk=item.pk)
+        todos_concluidos = not ItemServicoOS.objects.filter(
+            ordem_servico=os
+        ).exclude(status='CONCLUIDO').exists()
+
+        if todos_concluidos:
+            OrdemServico.objects.filter(pk=os.pk).update(
+                status='FINALIZADA',
+                data_finalizacao=data_finalizacao,
+            )
+
+        return Response(self.get_serializer(item).data)

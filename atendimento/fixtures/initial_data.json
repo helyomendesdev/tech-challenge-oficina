@@ -72,9 +72,7 @@
     "data_inicio_execucao": null,
     "data_finalizacao": null,
     "valor_total": "100.00",
-    "servicos": [
-      1
-    ]
+    "servicos": []
   }
 },
 {
@@ -88,9 +86,7 @@
     "data_inicio_execucao": null,
     "data_finalizacao": null,
     "valor_total": "550.00",
-    "servicos": [
-      1
-    ]
+    "servicos": []
   }
 },
 {
@@ -113,7 +109,8 @@
   "fields": {
     "os": 2,
     "peca": 1,
-    "quantidade": 2
+    "quantidade": 2,
+    "quantidade_utilizada": 0
   }
 },
 {
@@ -122,7 +119,8 @@
   "fields": {
     "os": 2,
     "peca": 2,
-    "quantidade": 1
+    "quantidade": 1,
+    "quantidade_utilizada": 0
   }
 },
 {
@@ -131,7 +129,8 @@
   "fields": {
     "os": 4,
     "peca": 1,
-    "quantidade": 2
+    "quantidade": 2,
+    "quantidade_utilizada": 0
   }
 },
 {
@@ -140,7 +139,8 @@
   "fields": {
     "os": 4,
     "peca": 1,
-    "quantidade": 2
+    "quantidade": 2,
+    "quantidade_utilizada": 0
   }
 },
 {
@@ -149,7 +149,32 @@
   "fields": {
     "os": 4,
     "peca": 1,
-    "quantidade": 1
+    "quantidade": 1,
+    "quantidade_utilizada": 0
+  }
+},
+{
+  "model": "atendimento.itemservicoos",
+  "pk": 1,
+  "fields": {
+    "ordem_servico": 3,
+    "servico": 1,
+    "status": "PENDENTE",
+    "data_inicio": null,
+    "data_finalizacao": null,
+    "created_by": null
+  }
+},
+{
+  "model": "atendimento.itemservicoos",
+  "pk": 2,
+  "fields": {
+    "ordem_servico": 4,
+    "servico": 1,
+    "status": "PENDENTE",
+    "data_inicio": null,
+    "data_finalizacao": null,
+    "created_by": null
   }
 }
 ]

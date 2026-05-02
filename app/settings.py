@@ -5,6 +5,7 @@ Gerado por 'django-admin startproject' com Django 5.1.
 Documentação: https://docs.djangoproject.com/en/5.1/topics/settings/
 """
 
+import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config, Csv  # C4: gestão segura de env vars
@@ -239,7 +240,7 @@ LOGGING = {
         'file': {
             'level': 'INFO',
             'class': 'logging.FileHandler',
-            'filename': str(BASE_DIR / 'oficina_atividades.log'),  # caminho absoluto
+            'filename': os.environ.get('DJANGO_LOG_FILE', str(BASE_DIR / 'oficina_atividades.log')),
             'formatter': 'verbose',
         },
         'console': {

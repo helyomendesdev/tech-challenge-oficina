@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Cliente, Veiculo, OrdemServico, ItemPecaOS, Servico, Peca
+from django.db.models import F
+from .models import Cliente, Veiculo, OrdemServico, ItemPecaOS, Servico, Peca, ItemServicoOS, ConsumoItemServico
 from validate_docbr import CPF, CNPJ
 
 # ---------------------------------------------------------------------------
@@ -87,7 +88,7 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'data_abertura', 'data_inicio_execucao',
-            'data_finalizacao', 'valor_total', 'created_by',
+            'data_finalizacao', 'valor_total', 'created_by', 'servicos',
         ]
 
     def validate_status(self, value):
@@ -100,6 +101,22 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
                     f"Transição inválida: '{status_atual}' → '{value}'. "
                     f"Próximos status permitidos: {transicoes_permitidas or ['nenhum']}"
                 )
+
+            if value == 'FINALIZADA':
+                tem_servico_nao_concluido = self.instance.itens_servico.exclude(
+                    status='CONCLUIDO'
+                ).exists()
+                if tem_servico_nao_concluido:
+                    raise serializers.ValidationError(
+                        "Não é possível finalizar a OS: existem serviços não concluídos."
+                    )
+                tem_peca_nao_utilizada = self.instance.itens_pecas.exclude(
+                    quantidade_utilizada=F('quantidade')
+                ).exists()
+                if tem_peca_nao_utilizada:
+                    raise serializers.ValidationError(
+                        "Não é possível finalizar a OS: existem peças não utilizadas."
+                    )
         return value
 
 
@@ -131,3 +148,63 @@ class ItemPecaOSSerializer(serializers.ModelSerializer):
                 )
 
         return data
+
+
+class ItemServicoOSSerializer(serializers.ModelSerializer):
+    tempo_execucao_minutos = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ItemServicoOS
+        fields = [
+            'id', 'servico', 'status',
+            'data_inicio', 'data_finalizacao', 'tempo_execucao_minutos',
+            'created_by',
+        ]
+        read_only_fields = [
+            'id', 'status', 'data_inicio', 'data_finalizacao',
+            'tempo_execucao_minutos', 'created_by',
+        ]
+
+    def get_tempo_execucao_minutos(self, obj):
+        return obj.tempo_execucao_minutos
+
+
+class ConsumoInputSerializer(serializers.Serializer):
+    item_peca_os_id = serializers.IntegerField()
+    quantidade = serializers.IntegerField(min_value=1)
+
+
+class IniciarServicoSerializer(serializers.Serializer):
+    data_inicio = serializers.DateTimeField(required=False, allow_null=True)
+    pecas = ConsumoInputSerializer(many=True, required=False, default=list)
+
+
+class FinalizarServicoSerializer(serializers.Serializer):
+    data_finalizacao = serializers.DateTimeField(required=False, allow_null=True)
+
+
+class ConsumoItemServicoSerializer(serializers.ModelSerializer):
+    peca = serializers.CharField(source='item_peca_os.peca.nome', read_only=True)
+
+    class Meta:
+        model = ConsumoItemServico
+        fields = ['peca', 'quantidade']
+
+
+class MetricasItemServicoSerializer(serializers.ModelSerializer):
+    descricao = serializers.CharField(source='servico.descricao', read_only=True)
+    tempo_execucao_minutos = serializers.SerializerMethodField()
+    pecas_consumidas = ConsumoItemServicoSerializer(
+        source='consumos', many=True, read_only=True
+    )
+
+    class Meta:
+        model = ItemServicoOS
+        fields = [
+            'id', 'servico', 'descricao', 'status',
+            'data_inicio', 'data_finalizacao',
+            'tempo_execucao_minutos', 'pecas_consumidas',
+        ]
+
+    def get_tempo_execucao_minutos(self, obj):
+        return obj.tempo_execucao_minutos

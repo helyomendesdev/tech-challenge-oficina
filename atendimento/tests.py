@@ -2,7 +2,7 @@ from django.test import TestCase
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 from rest_framework import status
-from .models import Cliente, Veiculo, OrdemServico, Peca, Servico, ItemPecaOS
+from .models import Cliente, Veiculo, OrdemServico, Peca, Servico, ItemPecaOS, ItemServicoOS, ConsumoItemServico
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +55,16 @@ def criar_servico(usuario=None, **kwargs):
     return Servico.objects.create(**defaults)
 
 
+def criar_item_servico_os(os, servico, usuario=None, status='PENDENTE', **kwargs):
+    return ItemServicoOS.objects.create(
+        ordem_servico=os,
+        servico=servico,
+        created_by=usuario,
+        status=status,
+        **kwargs
+    )
+
+
 # ---------------------------------------------------------------------------
 # Testes de Modelos (regras de negócio puras)
 # ---------------------------------------------------------------------------
@@ -81,13 +91,17 @@ class OrdemServicoModelTest(TestCase):
 
     def test_calculo_total_com_servico(self):
         servico = criar_servico(usuario=self.usuario)
-        self.os.servicos.add(servico)
+        ItemServicoOS.objects.create(
+            ordem_servico=self.os, servico=servico, created_by=self.usuario
+        )
         self.os.refresh_from_db()
         self.assertEqual(float(self.os.valor_total), 150.00)
 
     def test_calculo_total_peca_e_servico(self):
         servico = criar_servico(usuario=self.usuario)
-        self.os.servicos.add(servico)
+        ItemServicoOS.objects.create(
+            ordem_servico=self.os, servico=servico, created_by=self.usuario
+        )
         ItemPecaOS.objects.create(os=self.os, peca=self.peca, quantidade=1, created_by=self.usuario)
         self.os.refresh_from_db()
         self.assertEqual(float(self.os.valor_total), 240.00)
@@ -449,3 +463,397 @@ class ItemPecaOSAPITest(TestCase):
         payload = {'quantidade': 15}
         response = self.client.patch(f'/api/v1/itens-pecas/{item.id}/', payload)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class ItemServicoOSModelTest(TestCase):
+    def setUp(self):
+        self.usuario = criar_usuario(username='tecnico2')
+        self.cliente = criar_cliente(usuario=self.usuario, documento='12.340.546/0001-50')
+        self.veiculo = criar_veiculo(self.cliente, usuario=self.usuario, placa='GTI2E27')
+        self.servico = criar_servico(usuario=self.usuario)
+        self.os = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo, created_by=self.usuario
+        )
+
+    def test_item_servico_os_criado_como_pendente(self):
+        item = criar_item_servico_os(self.os, self.servico, self.usuario)
+        self.assertEqual(item.status, 'PENDENTE')
+        self.assertIsNone(item.data_inicio)
+        self.assertIsNone(item.data_finalizacao)
+
+    def test_tempo_execucao_minutos_retorna_none_sem_timestamps(self):
+        item = criar_item_servico_os(self.os, self.servico, self.usuario)
+        self.assertIsNone(item.tempo_execucao_minutos)
+
+    def test_tempo_execucao_minutos_calcula_corretamente(self):
+        from django.utils import timezone
+        import datetime
+        inicio = timezone.now()
+        fim = inicio + datetime.timedelta(hours=1)
+        item = criar_item_servico_os(
+            self.os, self.servico, self.usuario,
+            data_inicio=inicio, data_finalizacao=fim
+        )
+        self.assertAlmostEqual(item.tempo_execucao_minutos, 60.0, places=1)
+
+    def test_criar_item_servico_os_recalcula_total_os(self):
+        criar_item_servico_os(self.os, self.servico, self.usuario)
+        self.os.refresh_from_db()
+        self.assertEqual(float(self.os.valor_total), 150.00)
+
+    def test_deletar_item_servico_os_recalcula_total_os(self):
+        item = criar_item_servico_os(self.os, self.servico, self.usuario)
+        self.os.refresh_from_db()
+        self.assertEqual(float(self.os.valor_total), 150.00)
+        item.delete()
+        self.os.refresh_from_db()
+        self.assertEqual(float(self.os.valor_total), 0.00)
+
+    def test_quantidade_utilizada_padrao_zero(self):
+        peca = criar_peca(usuario=self.usuario)
+        item_peca = ItemPecaOS.objects.create(
+            os=self.os, peca=peca, quantidade=5, created_by=self.usuario
+        )
+        self.assertEqual(item_peca.quantidade_utilizada, 0)
+
+
+# ---------------------------------------------------------------------------
+# Testes de API CRUD para ItemServicoOS (rotas aninhadas)
+# ---------------------------------------------------------------------------
+
+class ItemServicoOSCRUDTest(TestCase):
+    def setUp(self):
+        self.usuario = criar_usuario(username='tecnico3')
+        self.cliente = criar_cliente(usuario=self.usuario, documento='16.827.912/0001-01')
+        self.veiculo = criar_veiculo(self.cliente, usuario=self.usuario, placa='GTI2E28')
+        self.servico = criar_servico(usuario=self.usuario)
+        self.os = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo, created_by=self.usuario
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.usuario)
+        self.url_list = f'/api/v1/ordens-servico/{self.os.pk}/servicos/'
+
+    def test_adicionar_servico_a_os(self):
+        response = self.client.post(self.url_list, {'servico': self.servico.pk})
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['status'], 'PENDENTE')
+        self.assertIsNone(response.data['data_inicio'])
+
+    def test_listar_servicos_da_os(self):
+        criar_item_servico_os(self.os, self.servico, self.usuario)
+        response = self.client.get(self.url_list)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data['results']), 1)
+
+    def test_detalhar_servico_da_os(self):
+        item = criar_item_servico_os(self.os, self.servico, self.usuario)
+        url = f'/api/v1/ordens-servico/{self.os.pk}/servicos/{item.pk}/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['id'], item.pk)
+
+    def test_remover_servico_pendente(self):
+        item = criar_item_servico_os(self.os, self.servico, self.usuario)
+        url = f'/api/v1/ordens-servico/{self.os.pk}/servicos/{item.pk}/'
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(ItemServicoOS.objects.filter(pk=item.pk).exists())
+
+    def test_nao_remover_servico_em_execucao(self):
+        item = criar_item_servico_os(self.os, self.servico, self.usuario, status='EM_EXECUCAO')
+        url = f'/api/v1/ordens-servico/{self.os.pk}/servicos/{item.pk}/'
+        response = self.client.delete(url)
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(ItemServicoOS.objects.filter(pk=item.pk).exists())
+
+    def test_os_de_outro_usuario_retorna_404(self):
+        outro = criar_usuario(username='outro3')
+        os_outro = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo, created_by=outro
+        )
+        item = criar_item_servico_os(os_outro, self.servico, outro)
+        url = f'/api/v1/ordens-servico/{os_outro.pk}/servicos/{item.pk}/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Testes da action iniciar em ItemServicoOS
+# ---------------------------------------------------------------------------
+
+class IniciarServicoTest(TestCase):
+    def setUp(self):
+        self.usuario = criar_usuario(username='tecnico4')
+        self.cliente = criar_cliente(usuario=self.usuario, documento='67.501.780/0001-96')
+        self.veiculo = criar_veiculo(self.cliente, usuario=self.usuario, placa='GTI2E29')
+        self.servico = criar_servico(usuario=self.usuario)
+        self.peca = criar_peca(usuario=self.usuario, estoque_atual=10)
+        self.os = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo,
+            created_by=self.usuario, status='AGUARDANDO'
+        )
+        self.item_peca = ItemPecaOS.objects.create(
+            os=self.os, peca=self.peca, quantidade=5, created_by=self.usuario
+        )
+        self.item = criar_item_servico_os(self.os, self.servico, self.usuario)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.usuario)
+        self.url = f'/api/v1/ordens-servico/{self.os.pk}/servicos/{self.item.pk}/iniciar/'
+
+    def test_iniciar_sem_pecas_muda_status_para_em_execucao(self):
+        response = self.client.post(self.url, {}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'EM_EXECUCAO')
+        self.assertIsNotNone(self.item.data_inicio)
+
+    def test_iniciar_usa_data_fornecida(self):
+        data = '2026-05-01T11:00:00Z'
+        response = self.client.post(self.url, {'data_inicio': data}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.item.refresh_from_db()
+        self.assertEqual(
+            self.item.data_inicio.strftime('%Y-%m-%dT%H:%M:%SZ'), data
+        )
+
+    def test_iniciar_primeiro_servico_transita_os_para_execucao(self):
+        self.client.post(self.url, {}, format='json')
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'EXECUCAO')
+        self.assertIsNotNone(self.os.data_inicio_execucao)
+
+    def test_iniciar_com_pecas_registra_consumo(self):
+        payload = {'pecas': [{'item_peca_os_id': self.item_peca.pk, 'quantidade': 3}]}
+        response = self.client.post(self.url, payload, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.item_peca.refresh_from_db()
+        self.assertEqual(self.item_peca.quantidade_utilizada, 3)
+        self.assertEqual(ConsumoItemServico.objects.filter(item_servico_os=self.item).count(), 1)
+
+    def test_iniciar_com_quantidade_acima_do_disponivel_retorna_400(self):
+        # Partially consume so disponivel=2, then request 3 (>2 but <=5)
+        ItemPecaOS.objects.filter(pk=self.item_peca.pk).update(quantidade_utilizada=3)
+        self.item_peca.refresh_from_db()
+        payload = {'pecas': [{'item_peca_os_id': self.item_peca.pk, 'quantidade': 3}]}
+        response = self.client.post(self.url, payload, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('Quantidade indisponível', response.data['erro'])
+
+    def test_iniciar_peca_de_outra_os_retorna_400(self):
+        outra_os = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo, created_by=self.usuario
+        )
+        peca_outra = criar_peca(usuario=self.usuario, estoque_atual=5)
+        item_outra = ItemPecaOS.objects.create(
+            os=outra_os, peca=peca_outra, quantidade=3, created_by=self.usuario
+        )
+        payload = {'pecas': [{'item_peca_os_id': item_outra.pk, 'quantidade': 1}]}
+        response = self.client.post(self.url, payload, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('não pertence', response.data['erro'])
+
+    def test_iniciar_servico_ja_iniciado_retorna_400(self):
+        self.item.status = 'EM_EXECUCAO'
+        self.item.save()
+        response = self.client.post(self.url, {}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_iniciar_em_os_de_outro_usuario_retorna_404(self):
+        outro = criar_usuario(username='outro4')
+        os_outro = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo, created_by=outro
+        )
+        item_outro = criar_item_servico_os(os_outro, self.servico, outro)
+        url = f'/api/v1/ordens-servico/{os_outro.pk}/servicos/{item_outro.pk}/iniciar/'
+        response = self.client.post(url, {}, format='json')
+        self.assertEqual(response.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Testes da action finalizar em ItemServicoOS
+# ---------------------------------------------------------------------------
+
+class FinalizarServicoTest(TestCase):
+    def setUp(self):
+        self.usuario = criar_usuario(username='tecnico5')
+        self.cliente = criar_cliente(usuario=self.usuario, documento='77.411.263/0001-08')
+        self.veiculo = criar_veiculo(self.cliente, usuario=self.usuario, placa='GTI2E30')
+        self.servico = criar_servico(usuario=self.usuario)
+        self.peca = criar_peca(usuario=self.usuario, estoque_atual=10)
+        self.os = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo,
+            created_by=self.usuario, status='EXECUCAO'
+        )
+        self.item_peca = ItemPecaOS.objects.create(
+            os=self.os, peca=self.peca, quantidade=5, created_by=self.usuario
+        )
+        self.item = criar_item_servico_os(
+            self.os, self.servico, self.usuario, status='EM_EXECUCAO'
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.usuario)
+        self.url = f'/api/v1/ordens-servico/{self.os.pk}/servicos/{self.item.pk}/finalizar/'
+
+    def _usar_todas_as_pecas(self):
+        ItemPecaOS.objects.filter(pk=self.item_peca.pk).update(quantidade_utilizada=5)
+
+    def test_finalizar_sem_pecas_pendentes_muda_status_para_concluido(self):
+        self._usar_todas_as_pecas()
+        response = self.client.post(self.url, {}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'CONCLUIDO')
+        self.assertIsNotNone(self.item.data_finalizacao)
+
+    def test_finalizar_usa_data_fornecida(self):
+        self._usar_todas_as_pecas()
+        data = '2026-05-01T15:00:00Z'
+        response = self.client.post(self.url, {'data_finalizacao': data}, format='json')
+        self.assertEqual(response.status_code, 200)
+        self.item.refresh_from_db()
+        self.assertEqual(
+            self.item.data_finalizacao.strftime('%Y-%m-%dT%H:%M:%SZ'), data
+        )
+
+    def test_finalizar_ultimo_servico_transita_os_para_finalizada(self):
+        self._usar_todas_as_pecas()
+        self.client.post(self.url, {}, format='json')
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'FINALIZADA')
+        self.assertIsNotNone(self.os.data_finalizacao)
+
+    def test_finalizar_bloqueado_se_pecas_nao_utilizadas(self):
+        response = self.client.post(self.url, {}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('peças não utilizadas', response.data['erro'])
+
+    def test_finalizar_nao_transita_os_se_ainda_ha_servico_ativo(self):
+        self._usar_todas_as_pecas()
+        servico2 = criar_servico(usuario=self.usuario)
+        criar_item_servico_os(self.os, servico2, self.usuario, status='EM_EXECUCAO')
+        self.client.post(self.url, {}, format='json')
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'EXECUCAO')
+
+    def test_finalizar_servico_pendente_retorna_400(self):
+        servico_pendente = criar_servico(usuario=self.usuario)
+        item_pendente = criar_item_servico_os(self.os, servico_pendente, self.usuario)
+        url = f'/api/v1/ordens-servico/{self.os.pk}/servicos/{item_pendente.pk}/finalizar/'
+        response = self.client.post(url, {}, format='json')
+        self.assertEqual(response.status_code, 400)
+
+    def test_os_sem_itens_pecas_finaliza_normalmente(self):
+        os_sem_pecas = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo,
+            created_by=self.usuario, status='EXECUCAO'
+        )
+        item = criar_item_servico_os(os_sem_pecas, self.servico, self.usuario, status='EM_EXECUCAO')
+        url = f'/api/v1/ordens-servico/{os_sem_pecas.pk}/servicos/{item.pk}/finalizar/'
+        response = self.client.post(url, {}, format='json')
+        self.assertEqual(response.status_code, 200)
+        os_sem_pecas.refresh_from_db()
+        self.assertEqual(os_sem_pecas.status, 'FINALIZADA')
+
+    def test_finalizar_em_os_de_outro_usuario_retorna_404(self):
+        outro = criar_usuario(username='outro5')
+        os_outro = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo, created_by=outro
+        )
+        servico2 = criar_servico(usuario=outro)
+        item_outro = criar_item_servico_os(os_outro, servico2, outro, status='EM_EXECUCAO')
+        url = f'/api/v1/ordens-servico/{os_outro.pk}/servicos/{item_outro.pk}/finalizar/'
+        response = self.client.post(url, {}, format='json')
+        self.assertEqual(response.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Testes da action metricas em OrdemServicoViewSet
+# ---------------------------------------------------------------------------
+
+class MetricasServicoTest(TestCase):
+    def setUp(self):
+        from django.utils import timezone
+        import datetime
+        self.usuario = criar_usuario(username='tecnico6')
+        self.cliente = criar_cliente(usuario=self.usuario, documento='01.339.513/0001-08')
+        self.veiculo = criar_veiculo(self.cliente, usuario=self.usuario, placa='GTI2E31')
+        self.servico1 = criar_servico(usuario=self.usuario, descricao='Troca de Óleo')
+        self.servico2 = criar_servico(usuario=self.usuario, descricao='Alinhamento')
+        self.os = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo,
+            created_by=self.usuario, status='EXECUCAO'
+        )
+
+        inicio = timezone.now()
+        fim1 = inicio + datetime.timedelta(hours=1)
+        fim2 = inicio + datetime.timedelta(hours=3)
+
+        self.item1 = criar_item_servico_os(
+            self.os, self.servico1, self.usuario,
+            status='CONCLUIDO', data_inicio=inicio, data_finalizacao=fim1
+        )
+        self.item2 = criar_item_servico_os(
+            self.os, self.servico2, self.usuario,
+            status='CONCLUIDO', data_inicio=inicio, data_finalizacao=fim2
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.usuario)
+        self.url = f'/api/v1/ordens-servico/{self.os.pk}/metricas/'
+
+    def test_metricas_retorna_todos_os_servicos_da_os(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 2)
+        descricoes = {item['servico']: item['descricao'] for item in response.data}
+        self.assertEqual(descricoes[self.servico1.pk], self.servico1.descricao)
+        self.assertEqual(descricoes[self.servico2.pk], self.servico2.descricao)
+
+    def test_metricas_calcula_tempo_execucao(self):
+        response = self.client.get(self.url)
+        tempos = {item['servico']: item['tempo_execucao_minutos'] for item in response.data}
+        self.assertAlmostEqual(tempos[self.servico1.pk], 60.0, places=0)
+        self.assertAlmostEqual(tempos[self.servico2.pk], 180.0, places=0)
+
+    def test_metricas_filtro_por_servico(self):
+        response = self.client.get(self.url, {'servico': self.servico1.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['servico'], self.servico1.pk)
+
+    def test_metricas_servico_pendente_retorna_tempo_null(self):
+        servico_extra = criar_servico(usuario=self.usuario)
+        item_pendente = criar_item_servico_os(self.os, servico_extra, self.usuario)
+        response = self.client.get(self.url, {'servico': item_pendente.servico_id})
+        tempos_null = [
+            item['tempo_execucao_minutos']
+            for item in response.data
+            if item['id'] == item_pendente.pk
+        ]
+        self.assertIn(None, tempos_null)
+
+    def test_metricas_os_de_outro_usuario_retorna_404(self):
+        outro = criar_usuario(username='outro6')
+        os_outro = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo, created_by=outro
+        )
+        url = f'/api/v1/ordens-servico/{os_outro.pk}/metricas/'
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_metricas_inclui_pecas_consumidas(self):
+        peca = criar_peca(usuario=self.usuario, estoque_atual=5)
+        item_peca = ItemPecaOS.objects.create(
+            os=self.os, peca=peca, quantidade=3, created_by=self.usuario
+        )
+        ConsumoItemServico.objects.create(
+            item_servico_os=self.item1,
+            item_peca_os=item_peca,
+            quantidade=2,
+        )
+        response = self.client.get(self.url, {'servico': self.servico1.pk})
+        consumos = response.data[0]['pecas_consumidas']
+        self.assertEqual(len(consumos), 1)
+        self.assertEqual(consumos[0]['quantidade'], 2)
+        self.assertIn('peca', consumos[0])
+        self.assertEqual(consumos[0]['peca'], peca.nome)
