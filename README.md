@@ -7,9 +7,9 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 ![DRF](https://img.shields.io/badge/DRF-3.15-red?style=flat)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?style=flat&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)
-![Cobertura](https://img.shields.io/badge/Cobertura-92%25-brightgreen?style=flat)
-![Testes](https://img.shields.io/badge/Testes-36%20passando-brightgreen?style=flat)
-![Bandit](https://img.shields.io/badge/Bandit-0%20High%2FMedium-brightgreen?style=flat)
+![Cobertura](https://img.shields.io/badge/Cobertura-88%25-brightgreen?style=flat)
+![Testes](https://img.shields.io/badge/Testes-76%20passando-brightgreen?style=flat)
+![SonarQube](https://img.shields.io/badge/SonarQube-A%20Rating-brightgreen?style=flat&logo=sonarqube&logoColor=white)
 ![OWASP](https://img.shields.io/badge/OWASP%20Top%2010-Conformante-brightgreen?style=flat)
 
 ---
@@ -42,9 +42,12 @@ O sistema permite que uma oficina mecânica gerencie seu ciclo operacional compl
 - Cadastro de **veículos** vinculados a clientes (placas no formato antigo e Mercosul)
 - Catálogo de **serviços** (mão de obra) e **peças** com controle de estoque
 - Abertura e acompanhamento de **Ordens de Serviço** com máquina de estados validada
+- **Rastreamento de execução por serviço**: cada serviço dentro de uma OS possui ciclo próprio (PENDENTE → EM_EXECUCAO → CONCLUIDO) com data de início, finalização e tempo calculado
+- **Consumo de peças por serviço**: peças alocadas na OS são vinculadas ao serviço que as consume; a OS só pode ser finalizada quando todas as peças foram utilizadas
 - **Baixa automática de estoque** ao adicionar/remover peças de uma OS
 - **Cálculo automático do valor total** da OS (serviços + peças)
 - Endpoint **público** para o cliente consultar o status da OS pela placa ou CPF/CNPJ
+- **Métricas de serviço** por OS: tempo de execução, peças consumidas, filtro por serviço
 - **Filtros avançados** por status, data, valor, nome e estoque em todos os endpoints
 - **Rate limiting** global e específico por endpoint
 
@@ -64,7 +67,7 @@ O sistema permite que uma oficina mecânica gerencie seu ciclo operacional compl
 | Segurança (env vars) | `python-decouple` |
 | CORS | `django-cors-headers` |
 | Servidor WSGI | `gunicorn` (produção) |
-| Análise de segurança | `bandit` |
+| Análise de segurança (SAST) | `SonarQube Community 26.4` |
 | Testes | `pytest-django` + `pytest-cov` |
 | Infraestrutura | Docker + Docker Compose |
 
@@ -279,6 +282,24 @@ Copie `.env.example` para `.env` e preencha os valores antes de iniciar a aplica
 | `PUT` | `/api/v1/itens-pecas/{id}/` | Atualizar item (ajusta estoque pela diferença) |
 | `DELETE` | `/api/v1/itens-pecas/{id}/` | Remover peça da OS (devolve ao estoque) |
 
+#### Serviços por OS (execução)
+
+| Método | Endpoint | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/ordens-servico/{os_id}/servicos/` | Listar serviços da OS com status e datas | Sim |
+| `POST` | `/api/v1/ordens-servico/{os_id}/servicos/` | Adicionar serviço à OS | Sim |
+| `GET` | `/api/v1/ordens-servico/{os_id}/servicos/{id}/` | Detalhar serviço | Sim |
+| `DELETE` | `/api/v1/ordens-servico/{os_id}/servicos/{id}/` | Remover serviço (somente PENDENTE) | Sim |
+| `POST` | `/api/v1/ordens-servico/{os_id}/servicos/{id}/iniciar/` | Iniciar execução (aceita `data_inicio` e `pecas`) | Sim |
+| `POST` | `/api/v1/ordens-servico/{os_id}/servicos/{id}/finalizar/` | Finalizar serviço (aceita `data_finalizacao`) | Sim |
+
+#### Métricas de Serviço
+
+| Método | Endpoint | Descrição | Auth |
+|---|---|---|---|
+| `GET` | `/api/v1/ordens-servico/{os_id}/metricas/` | Tempo de execução e peças consumidas por serviço da OS | Sim |
+| `GET` | `/api/v1/ordens-servico/{os_id}/metricas/?servico={id}` | Filtrar métricas por serviço específico | Sim |
+
 ---
 
 ## Filtros e Busca
@@ -365,6 +386,17 @@ curl http://localhost:8000/api/v1/clientes/ \
 | Peça **atualizada** em uma OS | Diferença de quantidade ajustada no estoque; `valor_total` recalculado |
 | Peça **removida** de uma OS | `estoque_atual` devolvido; `valor_total` recalculado |
 | Serviço adicionado/removido de uma OS | `valor_total` da OS recalculado |
+| **Serviço iniciado** (`/iniciar/`) | Status do serviço → `EM_EXECUCAO`; peças informadas são consumidas atomicamente; se for o primeiro serviço a iniciar em OS `AGUARDANDO`, a OS avança para `EXECUCAO` |
+| **Serviço finalizado** (`/finalizar/`) | Status do serviço → `CONCLUIDO`; se for o último serviço ativo e todas as peças da OS foram consumidas, a OS avança automaticamente para `FINALIZADA` |
+
+### Gates de finalização
+
+| Condição bloqueante | HTTP |
+|---|---|
+| Tentar avançar OS para `FINALIZADA` via `PATCH` com serviços não concluídos | `400` |
+| Tentar avançar OS para `FINALIZADA` via `PATCH` com peças não consumidas | `400` |
+| Chamar `/finalizar/` em serviço que não está `EM_EXECUCAO` | `400` |
+| Último serviço tenta finalizar mas há peças não consumidas na OS | `400` |
 
 ### Cálculo do valor total
 
@@ -423,23 +455,25 @@ source .venv/bin/activate
 # Rodar todos os testes com cobertura
 pytest --cov=atendimento --cov-report=term-missing
 
-# Análise de segurança (Medium+ severidade)
-bandit -r atendimento/ app/ --severity-level medium
+# Gerar relatório XML para o SonarQube
+pytest --cov=atendimento --cov-report=xml:coverage.xml
 ```
 
 **Resultado atual:**
 
 | Métrica | Valor |
 |---|---|
-| Total de testes | **36 passando** |
-| Cobertura geral | **92%** |
-| Bandit (High) | **0** |
-| Bandit (Medium) | **0** |
-| OWASP Top 10 | **9/9 conformantes** |
+| Total de testes | **76 passando** |
+| Cobertura geral | **88 %** |
+| SonarQube Bugs | **0** |
+| SonarQube Vulnerabilidades | **0** |
+| SonarQube Code Smells | **0** |
+| SonarQube Security Rating | **A** |
+| OWASP Top 10 | **9/10 conformantes** · 1/10 parcialmente |
 
 Os testes cobrem:
 
-- **Modelo:** Cálculo de total (peças, serviços, combinados), baixa e devolução de estoque, timestamps automáticos, erro de estoque insuficiente
+- **Modelo:** Cálculo de total (peças, serviços, combinados), baixa e devolução de estoque, timestamps automáticos, erro de estoque insuficiente, `tempo_execucao_minutos`
 - **API:** Criação de OS, autenticação JWT, transições de status válidas e inválidas
 - **Endpoint público:** Consulta por placa, CPF/CNPJ, identificador ausente, não encontrado
 - **Filtros:** Filtro por status, cliente, nome parcial, estoque mínimo, ordenação
@@ -447,6 +481,10 @@ Os testes cobrem:
 - **Clientes:** CPF válido/inválido, duplicidade de documento
 - **Veículos:** Normalização de placa para maiúsculas
 - **Itens de Peças:** Estoque insuficiente em inserção e atualização
+- **Serviços por OS (CRUD):** Adicionar, listar, remover, isolamento por usuário
+- **Iniciar serviço:** Peças consumidas atomicamente, cascade OS AGUARDANDO → EXECUCAO, erros de disponibilidade e estado
+- **Finalizar serviço:** Tempo calculado, cascade OS → FINALIZADA, gate de peças não utilizadas
+- **Métricas:** `tempo_execucao_minutos`, `pecas_consumidas`, filtro por serviço, isolamento por usuário
 
 > 📄 Relatório completo de qualidade e segurança: [docs/relatorio_qualidade_seguranca.md](docs/relatorio_qualidade_seguranca.md)
 
@@ -488,15 +526,15 @@ tech-challenge-fase-1-oficina/
 │   ├── urls.py                  # Roteamento da API
 │   ├── admin.py                 # Django Admin customizado
 │   ├── exceptions.py            # Handler de erros com formato estruturado
-│   ├── signals.py               # Signal M2M para recálculo de totais
-│   ├── tests.py                 # 30 testes (modelo + API + filtros + erros)
+│   ├── signals.py               # Signals post_save/post_delete para recálculo de totais
+│   ├── tests.py                 # 76 testes (modelo + API + filtros + execução de serviços + métricas)
 │   ├── migrations/              # Histórico de schema do banco
 │   └── fixtures/
 │       ├── initial_data.json    # Dado base (1 cliente, 1 veículo...)
 │       └── seed_data.json       # Dados de exemplo para desenvolvimento
 ├── docs/
 │   ├── images/                  # Diagramas e screenshots da API
-│   └── relatorio_qualidade_seguranca.md  # Relatório SAST (Bandit) + OWASP Top 10
+│   └── relatorio_qualidade_seguranca.md  # Relatório SAST (SonarQube) + OWASP Top 10
 ├── docker-compose.yml           # PostgreSQL + Gunicorn (healthcheck incluído)
 ├── Dockerfile
 ├── requirements.txt
@@ -511,22 +549,25 @@ tech-challenge-fase-1-oficina/
 
 ## Qualidade e Segurança
 
-A aplicação passa por análise estática de segurança (SAST via **Bandit**) e mapeamento contra o **OWASP Top 10 (2021)** a cada ciclo de desenvolvimento.
+A aplicação passa por análise estática de segurança (SAST via **SonarQube Community**) e mapeamento contra o **OWASP Top 10 (2021)** a cada ciclo de desenvolvimento.
 
 | Dimensão | Resultado |
 |---|---|
-| Cobertura de testes | **92 %** (meta ≥ 80 %) |
-| Testes passando | **36 / 36** |
-| Issues High/Medium (Bandit) | **0** |
-| OWASP Top 10 | **9 / 9 categorias conformantes** |
+| Cobertura de testes | **88 %** (meta ≥ 80 %) |
+| Testes passando | **76 / 76** |
+| Bugs (SonarQube) | **0** — Rating A |
+| Vulnerabilidades (SonarQube) | **0** — Rating A |
+| Code Smells (SonarQube) | **0** — dívida técnica 0 min |
+| Duplicação de código | **0,0 %** |
+| OWASP Top 10 | **9/10 conformantes** · 1/10 parcialmente |
 
 📄 **[Ver relatório completo → docs/relatorio_qualidade_seguranca.md](docs/relatorio_qualidade_seguranca.md)**
 
 O relatório detalha:
-- Análise SAST item a item com CWE referenciado
+- Análise SAST (SonarQube) com todos os issues identificados e resolvidos
 - Avaliação de cada categoria OWASP Top 10
 - Métricas de cobertura por módulo
-- Code smells identificados e plano de remediação priorizado
+- Code smells corrigidos e plano de remediação priorizado
 
 ---
 

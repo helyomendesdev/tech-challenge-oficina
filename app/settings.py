@@ -199,15 +199,16 @@ CORS_ALLOWED_ORIGINS = config(
 # Content Security Policy (CSP) — OWASP A05
 # ---------------------------------------------------------------------------
 
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_SCRIPT_SRC = ("'self'",)
-CSP_STYLE_SRC = ("'self'", "'unsafe-inline'")  # swagger-ui precisa de inline styles
-CSP_IMG_SRC = ("'self'", "data:", "blob:")
-CSP_FONT_SRC = ("'self'",)
-CSP_CONNECT_SRC = ("'self'",)
+_CSP_SELF = "'self'"
+CSP_DEFAULT_SRC = (_CSP_SELF,)
+CSP_SCRIPT_SRC = (_CSP_SELF,)
+CSP_STYLE_SRC = (_CSP_SELF, "'unsafe-inline'")  # swagger-ui precisa de inline styles
+CSP_IMG_SRC = (_CSP_SELF, "data:", "blob:")
+CSP_FONT_SRC = (_CSP_SELF,)
+CSP_CONNECT_SRC = (_CSP_SELF,)
 CSP_FRAME_ANCESTORS = ("'none'",)
-CSP_BASE_URI = ("'self'",)
-CSP_FORM_ACTION = ("'self'",)
+CSP_BASE_URI = (_CSP_SELF,)
+CSP_FORM_ACTION = (_CSP_SELF,)
 
 # ---------------------------------------------------------------------------
 # Headers de segurança HTTP (ativos apenas em produção)

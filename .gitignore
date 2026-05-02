@@ -30,6 +30,10 @@ seguranca_settings.txt
 .coverage
 htmlcov/
 .pytest_cache/
+coverage.xml
+
+# SonarQube
+.scannerwork/
 
 # Log gerado em runtime
 officina_atividades.log

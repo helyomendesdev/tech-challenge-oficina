@@ -8,7 +8,7 @@ Docker durante o desenvolvimento e CI local.
 Uso: pytest (configurado via pytest.ini com DJANGO_SETTINGS_MODULE=app.settings_test)
 """
 
-from .settings import *  # noqa: F401,F403
+from .settings import *  # noqa: F401,F403  # NOSONAR
 
 # Banco SQLite em memória — rápido, sem dependências externas
 DATABASES = {

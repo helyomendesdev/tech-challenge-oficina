@@ -8,15 +8,13 @@ ENV PYTHONUNBUFFERED=1
 # Diretório de trabalho dentro do container
 WORKDIR /app
 
-# Instala dependências do sistema necessárias para o psycopg2 (Postgres) e healthcheck
+# Instala dependências do sistema e cria usuário não-root
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
     curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Cria usuário não-root para execução
-RUN useradd -m -s /bin/bash appuser
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -s /bin/bash appuser
 
 # Copia e instala as dependências do Python
 COPY requirements.txt .

@@ -13,6 +13,8 @@ import logging
 # ---------------------------------------------------------------------------
 logger_security = logging.getLogger('security')
 
+_CRIADO_POR = 'Criado por'
+
 
 # ---------------------------------------------------------------------------
 # Validadores de campos
@@ -31,7 +33,7 @@ def validate_documento(value):
 
 
 def validate_placa(value):
-    pattern = r'^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$'
+    pattern = r'^[A-Z]{3}\d[A-Z\d]\d{2}$'
     if not re.match(pattern, value.upper()):
         raise ValidationError("Placa em formato inválido.")
 
@@ -48,7 +50,7 @@ class Cliente(models.Model):
     criado_em = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='clientes_criados', verbose_name='Criado por'
+        related_name='clientes_criados', verbose_name=_CRIADO_POR
     )
 
     def __str__(self):
@@ -63,7 +65,7 @@ class Veiculo(models.Model):
     ano = models.PositiveIntegerField()
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='veiculos_criados', verbose_name='Criado por'
+        related_name='veiculos_criados', verbose_name=_CRIADO_POR
     )
 
     def __str__(self):
@@ -75,7 +77,7 @@ class Servico(models.Model):
     valor_mao_de_obra = models.DecimalField(max_digits=10, decimal_places=2)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='servicos_criados', verbose_name='Criado por'
+        related_name='servicos_criados', verbose_name=_CRIADO_POR
     )
 
     def __str__(self):
@@ -88,7 +90,7 @@ class Peca(models.Model):
     estoque_atual = models.IntegerField(default=0)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='pecas_criadas', verbose_name='Criado por'
+        related_name='pecas_criadas', verbose_name=_CRIADO_POR
     )
 
     def __str__(self):
@@ -115,7 +117,7 @@ class OrdemServico(models.Model):
     valor_total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='ordens_criadas', verbose_name='Criado por'
+        related_name='ordens_criadas', verbose_name=_CRIADO_POR
     )
 
     def calcular_total(self):
@@ -146,7 +148,7 @@ class ItemPecaOS(models.Model):
     quantidade_utilizada = models.PositiveIntegerField(default=0)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='itens_pecas_criados', verbose_name='Criado por'
+        related_name='itens_pecas_criados', verbose_name=_CRIADO_POR
     )
 
     @property

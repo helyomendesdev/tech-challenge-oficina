@@ -9,8 +9,8 @@ from .models import Cliente, Veiculo, OrdemServico, Peca, Servico, ItemPecaOS, I
 # Helpers de criação de dados de teste
 # ---------------------------------------------------------------------------
 
-def criar_usuario(username='tecnico', password='senha@123'):
-    return User.objects.create_user(username=username, password=password)  # nosec B106,B107
+def criar_usuario(username='tecnico', password='senha@123'):  # NOSONAR
+    return User.objects.create_user(username=username, password=password)  # nosec B106,B107 # NOSONAR
 
 
 def criar_cliente(usuario=None, **kwargs):
@@ -175,7 +175,7 @@ class IsolamentoDadosTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_staff_ve_todos_os_clientes(self):
-        staff = User.objects.create_user('staff', password='staff123', is_staff=True)  # nosec B106
+        staff = User.objects.create_user('staff', password='staff123', is_staff=True)  # nosec B106 # NOSONAR
         client_staff = APIClient()
         client_staff.force_authenticate(user=staff)
         response = client_staff.get('/api/v1/clientes/')
