@@ -31,6 +31,8 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 - [Testes](#testes)
 - [Estrutura do Projeto](#estrutura-do-projeto)
 - [Qualidade e Segurança](#qualidade-e-segurança)
+- [Documentação de Entrega — Fase 1](#documentação-de-entrega--fase-1)
+- [Equipe](#equipe)
 
 ---
 
@@ -118,6 +120,26 @@ RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE
 ```
 
 > Transições fora do fluxo acima são rejeitadas com `HTTP 400`.
+
+### C4 Model
+
+#### Nível 1 — Contexto
+
+![Diagrama de Contexto](docs/images/1%20-%20C4Context.png)
+
+#### Nível 2 — Container
+
+![Diagrama de Container](docs/images/2%20-%20C4Container.png)
+
+#### Nível 3 — Componente
+
+![Diagrama de Componente](docs/images/3-%20C4Component.png)
+
+#### Nível 4 — Sequência (Iniciar Serviço)
+
+![Diagrama de Sequência](docs/images/4%20-%20SequenceDiagram.png)
+
+> Os diagramas acima foram gerados a partir dos códigos Mermaid disponíveis em [`docs/arquitetura/c4-model.md`](docs/arquitetura/c4-model.md).
 
 ---
 
@@ -585,4 +607,71 @@ Com `DJANGO_DEBUG=False` no `.env`, as seguintes proteções são ativadas autom
 
 ---
 
-*Tech Challenge Fase 1 — Pós-graduação Software Architecture · FIAP*
+## Documentação de Entrega — Fase 1
+
+A documentação completa da Fase 1 está organizada na pasta `docs/`:
+
+### Arquitetura
+
+| Documento | Descrição |
+|---|---|
+| [C4 Model](docs/arquitetura/c4-model.md) | Diagramas de Contexto, Container, Componente e Código (com código PlantUML para renderização) |
+
+### Especificações Técnicas
+
+| Documento | Descrição |
+|---|---|
+| [RFC-001 — Máquina de Estados da OS](docs/rfcs/rfc-001-estado-os.md) | Especificação do ciclo de vida da Ordem de Serviço e serviços |
+| [RFC-002 — Controle de Estoque](docs/rfcs/rfc-002-controle-estoque.md) | Especificação da baixa automática e consumo de peças por serviço |
+| [RFC-003 — Autenticação e Rate Limiting](docs/rfcs/rfc-003-autenticacao-jwt.md) | Especificação de JWT, throttling e segurança |
+| [ADR-001 — Django + DRF](docs/adrs/adr-001-django-drf.md) | Decisão de arquitetura: framework web |
+| [ADR-002 — PostgreSQL](docs/adrs/adr-002-postgresql.md) | Decisão de arquitetura: banco de dados |
+| [ADR-003 — Docker](docs/adrs/adr-003-docker.md) | Decisão de arquitetura: containerização |
+| [ADR-004 — Monolito](docs/adrs/adr-004-monolito.md) | Decisão de arquitetura: monolito para Fase 1 |
+
+### Design
+
+| Documento | Descrição |
+|---|---|
+| [High-Level Design (HLD)](docs/design/hld.md) | Visão de alto nível da arquitetura, fluxo de dados e ER |
+| [Low-Level Design (LLD)](docs/design/lld.md) | Detalhamento de módulos, APIs, banco de dados e regras de negócio |
+| [Design Approval Sheet (DAS)](docs/das/design-approval-sheet.md) | Checklist de aprovação do design com rastreabilidade completa |
+
+### Requisitos
+
+| Documento | Descrição |
+|---|---|
+| [Requisitos Funcionais](docs/requisitos/requisitos-funcionais.md) | RF001–RF017 com critérios de aceitação e rastreabilidade |
+| [Requisitos Não Funcionais](docs/requisitos/requisitos-nao-funcionais.md) | RNF001–RNF013 com métricas e conformidade |
+
+---
+
+### Artefatos de Domain-Driven Design (DDD)
+
+**Domain Storytelling**
+
+[Clique aqui para ser redirecionado para a documentação do Domain Storytelling](https://miro.com/app/board/uXjVHZ-qZuY=/?share_link_id=271439252192)
+
+**Event Storming**
+
+[Clique aqui para ser redirecionado para a documentação do Event Storming](https://miro.com/app/board/uXjVGyBSvFg=/?share_link_id=970374301740)
+
+**Linguagem Ubíqua**
+
+[Clique aqui para ser redirecionado para a linguagem ubíqua](https://www.notion.so/Linguaguem-Ub-qua-Fase-1-Grupo-26-353ca0515ab080f08a7ce45530779ed8?pvs=21)
+
+---
+
+## Equipe
+
+| Nome | RM |
+|---|---|
+| Afonso Victoriano Franco | RM373563 |
+| Hélio Mendes da Silva | RM374170 |
+| João Pedro Rodrigues Martins | RM372818 |
+| Luís Fernando Montes | RM367183 |
+| Sophia Sussa Campos Bastos | RM371864 |
+
+---
+
+*Tech Challenge Fase 1 — Pós-graduação Software Architecture · FIAP · Grupo 26*
