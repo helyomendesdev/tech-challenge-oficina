@@ -733,6 +733,102 @@
             },
             "description": "Deve retornar 400 — identificador é obrigatório."
           }
+        },
+        {
+          "name": "Transições de Status",
+          "item": [
+            {
+              "name": "Iniciar Diagnóstico",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/iniciar-diagnostico/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "iniciar-diagnostico", ""]
+                },
+                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+              }
+            },
+            {
+              "name": "Finalizar Diagnóstico",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/finalizar-diagnostico/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "finalizar-diagnostico", ""]
+                },
+                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+              }
+            },
+            {
+              "name": "Aprovar Orçamento",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/aprovar-orcamento/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "aprovar-orcamento", ""]
+                },
+                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+              }
+            },
+            {
+              "name": "Recusar Orçamento",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/recusar-orcamento/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "recusar-orcamento", ""]
+                },
+                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+              }
+            },
+            {
+              "name": "Finalizar OS",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/finalizar/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "finalizar", ""]
+                },
+                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+              }
+            },
+            {
+              "name": "Entregar Veículo",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/entregar/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "entregar", ""]
+                },
+                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+              }
+            },
+            {
+              "name": "Cancelar OS",
+              "request": {
+                "method": "POST",
+                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/cancelar/",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "cancelar", ""]
+                },
+                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+              }
+            }
+          ]
         }
       ]
     },

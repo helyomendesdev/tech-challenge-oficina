@@ -8,7 +8,7 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?style=flat&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)
 ![Cobertura](https://img.shields.io/badge/Cobertura-88%25-brightgreen?style=flat)
-![Testes](https://img.shields.io/badge/Testes-76%20passando-brightgreen?style=flat)
+![Testes](https://img.shields.io/badge/Testes-105%20passando-brightgreen?style=flat)
 ![SonarQube](https://img.shields.io/badge/SonarQube-A%20Rating-brightgreen?style=flat&logo=sonarqube&logoColor=white)
 ![OWASP](https://img.shields.io/badge/OWASP%20Top%2010-Conformante-brightgreen?style=flat)
 
@@ -120,6 +120,7 @@ RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE
 ```
 
 > Transições fora do fluxo acima são rejeitadas com `HTTP 400`.
+> O status da OS **não pode ser alterado via PATCH**. Use os endpoints dedicados listados em [Máquina de estados da Ordem de Serviço](#máquina-de-estados-da-ordem-de-serviço).
 
 ### C4 Model
 
@@ -290,7 +291,7 @@ Copie `.env.example` para `.env` e preencha os valores antes de iniciar a aplica
 | `POST` | `/api/v1/ordens-servico/` | Abrir nova OS | Sim |
 | `GET` | `/api/v1/ordens-servico/{id}/` | Detalhar OS | Sim |
 | `PUT` | `/api/v1/ordens-servico/{id}/` | Atualizar OS | Sim |
-| `PATCH` | `/api/v1/ordens-servico/{id}/` | Avançar status / adicionar serviços | Sim |
+| `PATCH` | `/api/v1/ordens-servico/{id}/` | Atualizar campos da OS (exceto status — use endpoints dedicados) | Sim |
 | `DELETE` | `/api/v1/ordens-servico/{id}/` | Remover OS | Sim |
 | `GET` | `/api/v1/ordens-servico/consulta-cliente/` | Consultar OS por placa ou CPF/CNPJ | **Não** |
 
@@ -389,6 +390,26 @@ curl http://localhost:8000/api/v1/clientes/ \
 
 ## Regras de Negócio
 
+### Máquina de estados da Ordem de Serviço
+
+O status da OS **não pode ser alterado via PATCH**. Cada transição é acionada por um endpoint dedicado:
+
+| Endpoint | Transição |
+|---|---|
+| `POST /api/v1/ordens-servico/{id}/iniciar-diagnostico/` | RECEBIDA → DIAGNOSTICO | 
+| `POST /api/v1/ordens-servico/{id}/finalizar-diagnostico/` | DIAGNOSTICO → AGUARDANDO | 
+| `POST /api/v1/ordens-servico/{id}/aprovar-orcamento/` | AGUARDANDO → EXECUCAO |
+| `POST /api/v1/ordens-servico/{id}/recusar-orcamento/` | AGUARDANDO → DIAGNOSTICO | 
+| `POST /api/v1/ordens-servico/{id}/finalizar/` | EXECUCAO → FINALIZADA |
+| `POST /api/v1/ordens-servico/{id}/entregar/` | FINALIZADA → ENTREGUE |
+| `POST /api/v1/ordens-servico/{id}/cancelar/` | AGUARDANDO → CANCELADA |
+
+```
+RECEBIDA → DIAGNOSTICO → AGUARDANDO ┬→ EXECUCAO → FINALIZADA → ENTREGUE
+                                     ├→ DIAGNOSTICO (recusado, loop)
+                                     └→ CANCELADA
+```
+
 ### Validações de entrada
 
 | Campo | Regra |
@@ -485,7 +506,7 @@ pytest --cov=atendimento --cov-report=xml:coverage.xml
 
 | Métrica | Valor |
 |---|---|
-| Total de testes | **76 passando** |
+| Total de testes | **105 passando** |
 | Cobertura geral | **88 %** |
 | SonarQube Bugs | **0** |
 | SonarQube Vulnerabilidades | **0** |
@@ -549,7 +570,7 @@ tech-challenge-fase-1-oficina/
 │   ├── admin.py                 # Django Admin customizado
 │   ├── exceptions.py            # Handler de erros com formato estruturado
 │   ├── signals.py               # Signals post_save/post_delete para recálculo de totais
-│   ├── tests.py                 # 76 testes (modelo + API + filtros + execução de serviços + métricas)
+│   ├── tests.py                 # 105 testes (modelo + API + filtros + execução de serviços + métricas + transições de status)
 │   ├── migrations/              # Histórico de schema do banco
 │   └── fixtures/
 │       ├── initial_data.json    # Dado base (1 cliente, 1 veículo...)
@@ -576,7 +597,7 @@ A aplicação passa por análise estática de segurança (SAST via **SonarQube C
 | Dimensão | Resultado |
 |---|---|
 | Cobertura de testes | **88 %** (meta ≥ 80 %) |
-| Testes passando | **76 / 76** |
+| Testes passando | **105 / 105** |
 | Bugs (SonarQube) | **0** — Rating A |
 | Vulnerabilidades (SonarQube) | **0** — Rating A |
 | Code Smells (SonarQube) | **0** — dívida técnica 0 min |
@@ -607,6 +628,7 @@ Com `DJANGO_DEBUG=False` no `.env`, as seguintes proteções são ativadas autom
 
 ---
 
+*Tech Challenge Fase 1 — Pós-graduação Software Architecture · FIAP*
 ## Documentação de Entrega — Fase 1
 
 A documentação completa da Fase 1 está organizada na pasta `docs/`:

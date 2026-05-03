@@ -1,21 +1,6 @@
 from rest_framework import serializers
-from django.db.models import F
 from .models import Cliente, Veiculo, OrdemServico, ItemPecaOS, Servico, Peca, ItemServicoOS, ConsumoItemServico
 from validate_docbr import CPF, CNPJ
-
-# ---------------------------------------------------------------------------
-# Máquina de transição de estados válidos (M6)
-# ---------------------------------------------------------------------------
-
-TRANSICOES_VALIDAS = {
-    'RECEBIDA':    ['DIAGNOSTICO'],
-    'DIAGNOSTICO': ['AGUARDANDO'],
-    'AGUARDANDO':  ['EXECUCAO'],
-    'EXECUCAO':    ['FINALIZADA'],
-    'FINALIZADA':  ['ENTREGUE'],
-    'ENTREGUE':    [],
-}
-
 
 # ---------------------------------------------------------------------------
 # Serializers
@@ -87,37 +72,9 @@ class OrdemServicoSerializer(serializers.ModelSerializer):
             'valor_total', 'created_by',
         ]
         read_only_fields = [
-            'id', 'data_abertura', 'data_inicio_execucao',
+            'id', 'status', 'data_abertura', 'data_inicio_execucao',
             'data_finalizacao', 'valor_total', 'created_by', 'servicos',
         ]
-
-    def validate_status(self, value):
-        """M6: valida que a transição de status segue o fluxo permitido."""
-        if self.instance:
-            status_atual = self.instance.status
-            transicoes_permitidas = TRANSICOES_VALIDAS.get(status_atual, [])
-            if value != status_atual and value not in transicoes_permitidas:
-                raise serializers.ValidationError(
-                    f"Transição inválida: '{status_atual}' → '{value}'. "
-                    f"Próximos status permitidos: {transicoes_permitidas or ['nenhum']}"
-                )
-
-            if value == 'FINALIZADA':
-                tem_servico_nao_concluido = self.instance.itens_servico.exclude(
-                    status='CONCLUIDO'
-                ).exists()
-                if tem_servico_nao_concluido:
-                    raise serializers.ValidationError(
-                        "Não é possível finalizar a OS: existem serviços não concluídos."
-                    )
-                tem_peca_nao_utilizada = self.instance.itens_pecas.exclude(
-                    quantidade_utilizada=F('quantidade')
-                ).exists()
-                if tem_peca_nao_utilizada:
-                    raise serializers.ValidationError(
-                        "Não é possível finalizar a OS: existem peças não utilizadas."
-                    )
-        return value
 
 
 class ItemPecaOSSerializer(serializers.ModelSerializer):

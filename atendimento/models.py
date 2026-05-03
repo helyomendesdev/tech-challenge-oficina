@@ -2,6 +2,7 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.contrib.auth.models import User
+from django.db.models import F
 from validate_docbr import CPF, CNPJ
 import re
 from django.db.models.signals import post_save, post_delete
@@ -105,6 +106,7 @@ class OrdemServico(models.Model):
         ('EXECUCAO', 'Em execução'),
         ('FINALIZADA', 'Finalizada'),
         ('ENTREGUE', 'Entregue'),
+        ('CANCELADA', 'Cancelada'),
     ]
 
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT)
@@ -139,6 +141,68 @@ class OrdemServico(models.Model):
 
     def __str__(self):
         return f"OS {self.id} - {self.status}"
+
+    def _transicionar(self, status_esperado, novo_status, mensagem_erro):
+        if self.status != status_esperado:
+            raise ValidationError(mensagem_erro)
+        self.status = novo_status
+        self.save()
+
+    def iniciar_diagnostico(self):
+        self._transicionar(
+            'RECEBIDA', 'DIAGNOSTICO',
+            "A OS precisa estar com status RECEBIDA para iniciar o diagnóstico."
+        )
+
+    def finalizar_diagnostico(self):
+        self._transicionar(
+            'DIAGNOSTICO', 'AGUARDANDO',
+            "A OS precisa estar em DIAGNOSTICO para finalizar o diagnóstico."
+        )
+
+    def aprovar_orcamento(self):
+        self._transicionar(
+            'AGUARDANDO', 'EXECUCAO',
+            "A OS precisa estar AGUARDANDO aprovação para aprovar o orçamento."
+        )
+
+    def recusar_orcamento(self):
+        self._transicionar(
+            'AGUARDANDO', 'DIAGNOSTICO',
+            "A OS precisa estar AGUARDANDO aprovação para recusar o orçamento."
+        )
+
+    def finalizar(self):
+        if self.status != 'EXECUCAO':
+            raise ValidationError(
+                "A OS precisa estar em EXECUCAO para ser finalizada."
+            )
+        tem_servico_nao_concluido = self.itens_servico.exclude(status='CONCLUIDO').exists()
+        if tem_servico_nao_concluido:
+            raise ValidationError(
+                "Não é possível finalizar a OS: existem serviços não concluídos."
+            )
+        tem_peca_nao_utilizada = self.itens_pecas.exclude(
+            quantidade_utilizada=F('quantidade')
+        ).exists()
+        if tem_peca_nao_utilizada:
+            raise ValidationError(
+                "Não é possível finalizar a OS: existem peças não utilizadas."
+            )
+        self.status = 'FINALIZADA'
+        self.save()
+
+    def entregar(self):
+        self._transicionar(
+            'FINALIZADA', 'ENTREGUE',
+            "A OS precisa estar FINALIZADA para ser entregue."
+        )
+
+    def cancelar(self):
+        self._transicionar(
+            'AGUARDANDO', 'CANCELADA',
+            "A OS precisa estar AGUARDANDO aprovação para ser cancelada."
+        )
 
 
 class ItemPecaOS(models.Model):

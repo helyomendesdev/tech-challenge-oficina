@@ -123,18 +123,149 @@ class OrdemServicoModelTest(TestCase):
             ItemPecaOS.objects.create(os=self.os, peca=self.peca, quantidade=999, created_by=self.usuario)
 
     def test_timestamps_ao_mudar_status_para_execucao(self):
-        self.os.status = 'EXECUCAO'
-        self.os.save()
+        OrdemServico.objects.filter(pk=self.os.pk).update(status='AGUARDANDO')
+        self.os.refresh_from_db()
+        self.os.aprovar_orcamento()
         self.os.refresh_from_db()
         self.assertIsNotNone(self.os.data_inicio_execucao)
 
     def test_timestamps_ao_finalizar_os(self):
-        self.os.status = 'EXECUCAO'
-        self.os.save()
-        self.os.status = 'FINALIZADA'
-        self.os.save()
+        OrdemServico.objects.filter(pk=self.os.pk).update(status='EXECUCAO')
+        self.os.refresh_from_db()
+        self.os.finalizar()
         self.os.refresh_from_db()
         self.assertIsNotNone(self.os.data_finalizacao)
+
+
+class OrdemServicoTransicaoTest(TestCase):
+    """Testa os métodos de transição de estado do modelo OrdemServico."""
+
+    def setUp(self):
+        self.usuario = criar_usuario(username='tecnico_trans')
+        self.cliente = criar_cliente(usuario=self.usuario, documento='49.648.573/0001-22')
+        self.veiculo = criar_veiculo(self.cliente, usuario=self.usuario, placa='TRS1A11')
+        self.os = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo, created_by=self.usuario
+        )
+
+    def _os_em(self, status_alvo):
+        """Helper: força o status sem passar pelos guards de domínio."""
+        OrdemServico.objects.filter(pk=self.os.pk).update(status=status_alvo)
+        self.os.refresh_from_db()
+
+    # --- iniciar_diagnostico ---
+
+    def test_iniciar_diagnostico_de_recebida(self):
+        self.os.iniciar_diagnostico()
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'DIAGNOSTICO')
+
+    def test_iniciar_diagnostico_status_errado_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+        self._os_em('DIAGNOSTICO')
+        with self.assertRaises(ValidationError):
+            self.os.iniciar_diagnostico()
+
+    # --- finalizar_diagnostico ---
+
+    def test_finalizar_diagnostico_de_diagnostico(self):
+        self._os_em('DIAGNOSTICO')
+        self.os.finalizar_diagnostico()
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'AGUARDANDO')
+
+    def test_finalizar_diagnostico_status_errado_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            self.os.finalizar_diagnostico()
+
+    # --- aprovar_orcamento ---
+
+    def test_aprovar_orcamento_de_aguardando(self):
+        self._os_em('AGUARDANDO')
+        self.os.aprovar_orcamento()
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'EXECUCAO')
+        self.assertIsNotNone(self.os.data_inicio_execucao)
+
+    def test_aprovar_orcamento_status_errado_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            self.os.aprovar_orcamento()
+
+    # --- recusar_orcamento ---
+
+    def test_recusar_orcamento_volta_para_diagnostico(self):
+        self._os_em('AGUARDANDO')
+        self.os.recusar_orcamento()
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'DIAGNOSTICO')
+
+    def test_recusar_orcamento_status_errado_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            self.os.recusar_orcamento()
+
+    # --- finalizar ---
+
+    def test_finalizar_de_execucao(self):
+        self._os_em('EXECUCAO')
+        self.os.finalizar()
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'FINALIZADA')
+        self.assertIsNotNone(self.os.data_finalizacao)
+
+    def test_finalizar_status_errado_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            self.os.finalizar()
+
+    def test_finalizar_com_servico_nao_concluido_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+        self._os_em('EXECUCAO')
+        servico = criar_servico(usuario=self.usuario)
+        ItemServicoOS.objects.create(
+            ordem_servico=self.os, servico=servico, created_by=self.usuario
+        )
+        with self.assertRaises(ValidationError):
+            self.os.finalizar()
+
+    # --- entregar ---
+
+    def test_entregar_de_finalizada(self):
+        self._os_em('FINALIZADA')
+        self.os.entregar()
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'ENTREGUE')
+
+    def test_entregar_status_errado_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            self.os.entregar()
+
+    # --- cancelar ---
+
+    def test_cancelar_de_aguardando(self):
+        self._os_em('AGUARDANDO')
+        self.os.cancelar()
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'CANCELADA')
+
+    def test_cancelar_status_errado_levanta_erro(self):
+        from django.core.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            self.os.cancelar()
+
+    # --- fluxo completo ---
+
+    def test_recusar_e_reenviar_orcamento(self):
+        self._os_em('AGUARDANDO')
+        self.os.recusar_orcamento()
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'DIAGNOSTICO')
+        self.os.finalizar_diagnostico()
+        self.os.refresh_from_db()
+        self.assertEqual(self.os.status, 'AGUARDANDO')
 
 
 # ---------------------------------------------------------------------------
@@ -224,20 +355,22 @@ class OrdemServicoAPITest(TestCase):
         self.assertEqual(response.data['status'], 'RECEBIDA')
         self.assertEqual(response.data['created_by'], self.user.id)
 
-    def test_avanco_status_valido(self):
-        response = self.client.patch(
-            f'/api/v1/ordens-servico/{self.os.id}/',
-            {'status': 'DIAGNOSTICO'}
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['status'], 'DIAGNOSTICO')
-
-    def test_transicao_status_invalida(self):
+    def test_status_ignorado_em_patch(self):
+        """status é read-only: PATCH com status não deve alterar o valor."""
         response = self.client.patch(
             f'/api/v1/ordens-servico/{self.os.id}/',
             {'status': 'ENTREGUE'}
         )
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'RECEBIDA')
+
+    def test_status_ignorado_em_patch_campo_valido(self):
+        """PATCH de outros campos funciona normalmente."""
+        response = self.client.patch(
+            f'/api/v1/ordens-servico/{self.os.id}/',
+            {'veiculo': self.veiculo.id}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     def test_consulta_cliente_por_placa(self):
         response = self.client.get(
@@ -591,7 +724,7 @@ class IniciarServicoTest(TestCase):
         self.peca = criar_peca(usuario=self.usuario, estoque_atual=10)
         self.os = OrdemServico.objects.create(
             cliente=self.cliente, veiculo=self.veiculo,
-            created_by=self.usuario, status='AGUARDANDO'
+            created_by=self.usuario, status='EXECUCAO'
         )
         self.item_peca = ItemPecaOS.objects.create(
             os=self.os, peca=self.peca, quantidade=5, created_by=self.usuario
@@ -617,11 +750,12 @@ class IniciarServicoTest(TestCase):
             self.item.data_inicio.strftime('%Y-%m-%dT%H:%M:%SZ'), data
         )
 
-    def test_iniciar_primeiro_servico_transita_os_para_execucao(self):
-        self.client.post(self.url, {}, format='json')
+    def test_iniciar_servico_nao_altera_status_da_os(self):
+        """Com a OS já em EXECUCAO (após aprovar_orcamento), iniciar serviço não muda o status da OS."""
+        response = self.client.post(self.url, {}, format='json')
+        self.assertEqual(response.status_code, 200)
         self.os.refresh_from_db()
         self.assertEqual(self.os.status, 'EXECUCAO')
-        self.assertIsNotNone(self.os.data_inicio_execucao)
 
     def test_iniciar_com_pecas_registra_consumo(self):
         payload = {'pecas': [{'item_peca_os_id': self.item_peca.pk, 'quantidade': 3}]}
@@ -857,3 +991,130 @@ class MetricasServicoTest(TestCase):
         self.assertEqual(consumos[0]['quantidade'], 2)
         self.assertIn('peca', consumos[0])
         self.assertEqual(consumos[0]['peca'], peca.nome)
+
+
+# ---------------------------------------------------------------------------
+# Testes de integração para endpoints de transição de status
+# ---------------------------------------------------------------------------
+
+class TransicaoStatusAPITest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = criar_usuario(username='tecnico_api_trans')
+        self.client.force_authenticate(user=self.user)
+        self.cliente = criar_cliente(usuario=self.user, documento='73.834.979/0001-09')
+        self.veiculo = criar_veiculo(self.cliente, usuario=self.user, placa='TRS2B22')
+        self.os = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo, created_by=self.user
+        )
+
+    def _os_em(self, status_alvo):
+        OrdemServico.objects.filter(pk=self.os.pk).update(status=status_alvo)
+        self.os.refresh_from_db()
+
+    def test_iniciar_diagnostico_retorna_200_e_status_correto(self):
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/iniciar-diagnostico/'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'DIAGNOSTICO')
+
+    def test_iniciar_diagnostico_status_invalido_retorna_400(self):
+        self._os_em('DIAGNOSTICO')
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/iniciar-diagnostico/'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_finalizar_diagnostico_retorna_200_e_status_correto(self):
+        self._os_em('DIAGNOSTICO')
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/finalizar-diagnostico/'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'AGUARDANDO')
+
+    def test_aprovar_orcamento_retorna_200_e_status_correto(self):
+        self._os_em('AGUARDANDO')
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/aprovar-orcamento/'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'EXECUCAO')
+
+    def test_recusar_orcamento_retorna_200_e_volta_para_diagnostico(self):
+        self._os_em('AGUARDANDO')
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/recusar-orcamento/'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'DIAGNOSTICO')
+
+    def test_finalizar_retorna_200_e_status_correto(self):
+        self._os_em('EXECUCAO')
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/finalizar/'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'FINALIZADA')
+
+    def test_finalizar_com_servico_pendente_retorna_400(self):
+        self._os_em('EXECUCAO')
+        servico = criar_servico(usuario=self.user)
+        ItemServicoOS.objects.create(
+            ordem_servico=self.os, servico=servico, created_by=self.user
+        )
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/finalizar/'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_entregar_retorna_200_e_status_correto(self):
+        self._os_em('FINALIZADA')
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/entregar/'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'ENTREGUE')
+
+    def test_cancelar_retorna_200_e_status_correto(self):
+        self._os_em('AGUARDANDO')
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/cancelar/'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'CANCELADA')
+
+    def test_cancelar_status_invalido_retorna_400(self):
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/cancelar/'
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_acao_exige_autenticacao(self):
+        anonimo = APIClient()
+        response = anonimo.post(
+            f'/api/v1/ordens-servico/{self.os.id}/iniciar-diagnostico/'
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_acao_em_os_de_outro_usuario_retorna_404(self):
+        outro = criar_usuario(username='outro_trans')
+        os_outro = OrdemServico.objects.create(
+            cliente=self.cliente, veiculo=self.veiculo, created_by=outro
+        )
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{os_outro.id}/iniciar-diagnostico/'
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_fluxo_completo_happy_path(self):
+        self.client.post(f'/api/v1/ordens-servico/{self.os.id}/iniciar-diagnostico/')
+        self.client.post(f'/api/v1/ordens-servico/{self.os.id}/finalizar-diagnostico/')
+        self.client.post(f'/api/v1/ordens-servico/{self.os.id}/aprovar-orcamento/')
+        self.client.post(f'/api/v1/ordens-servico/{self.os.id}/finalizar/')
+        response = self.client.post(
+            f'/api/v1/ordens-servico/{self.os.id}/entregar/'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['status'], 'ENTREGUE')

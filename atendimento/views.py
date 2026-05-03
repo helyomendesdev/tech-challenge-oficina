@@ -1,5 +1,6 @@
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from rest_framework import viewsets, mixins, status as drf_status
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
 from .models import Cliente, Veiculo, OrdemServico, Servico, Peca, ItemPecaOS, ItemServicoOS, ConsumoItemServico
@@ -117,6 +118,14 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     ordering_fields = ['data_abertura', 'data_finalizacao', 'valor_total', 'status']
     ordering = ['-data_abertura']
 
+    def _execute_transition(self, pk, method_name):
+        os = self.get_object()
+        try:
+            getattr(os, method_name)()
+        except ValidationError as exc:
+            return Response({'erro': ' '.join(exc.messages)}, status=drf_status.HTTP_400_BAD_REQUEST)
+        return Response(OrdemServicoSerializer(os).data)
+
     @extend_schema(
         description=(
             "Endpoint público — consulta OS pela placa do veículo ou CPF/CNPJ do cliente. "
@@ -192,6 +201,41 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
                 return Response({'erro': "'servico' deve ser um inteiro."}, status=drf_status.HTTP_400_BAD_REQUEST)
         serializer = MetricasItemServicoSerializer(qs, many=True)
         return Response(serializer.data)
+
+    @extend_schema(description="Inicia o diagnóstico da OS. Transição: RECEBIDA → DIAGNOSTICO.")
+    @action(detail=True, methods=['post'], url_path='iniciar-diagnostico')
+    def iniciar_diagnostico(self, request, pk=None):
+        return self._execute_transition(pk, 'iniciar_diagnostico')
+
+    @extend_schema(description="Finaliza o diagnóstico e aguarda aprovação do orçamento. Transição: DIAGNOSTICO → AGUARDANDO.")
+    @action(detail=True, methods=['post'], url_path='finalizar-diagnostico')
+    def finalizar_diagnostico(self, request, pk=None):
+        return self._execute_transition(pk, 'finalizar_diagnostico')
+
+    @extend_schema(description="Registra aprovação do orçamento pelo cliente. Transição: AGUARDANDO → EXECUCAO.")
+    @action(detail=True, methods=['post'], url_path='aprovar-orcamento')
+    def aprovar_orcamento(self, request, pk=None):
+        return self._execute_transition(pk, 'aprovar_orcamento')
+
+    @extend_schema(description="Registra recusa do orçamento; OS retorna para diagnóstico. Transição: AGUARDANDO → DIAGNOSTICO.")
+    @action(detail=True, methods=['post'], url_path='recusar-orcamento')
+    def recusar_orcamento(self, request, pk=None):
+        return self._execute_transition(pk, 'recusar_orcamento')
+
+    @extend_schema(description="Finaliza a OS quando todos os serviços estão concluídos. Transição: EXECUCAO → FINALIZADA.")
+    @action(detail=True, methods=['post'], url_path='finalizar')
+    def finalizar(self, request, pk=None):
+        return self._execute_transition(pk, 'finalizar')
+
+    @extend_schema(description="Registra entrega do veículo ao cliente. Transição: FINALIZADA → ENTREGUE.")
+    @action(detail=True, methods=['post'], url_path='entregar')
+    def entregar(self, request, pk=None):
+        return self._execute_transition(pk, 'entregar')
+
+    @extend_schema(description="Registra desistência do cliente. Transição: AGUARDANDO → CANCELADA.")
+    @action(detail=True, methods=['post'], url_path='cancelar')
+    def cancelar(self, request, pk=None):
+        return self._execute_transition(pk, 'cancelar')
 
 
 @extend_schema_view(
@@ -297,17 +341,6 @@ class ItemServicoOSViewSet(
             data_inicio=data_inicio,
         )
         item.refresh_from_db()
-
-        os = item.ordem_servico
-        if os.status == 'AGUARDANDO':
-            nenhum_outro_ativo = not ItemServicoOS.objects.filter(
-                ordem_servico=os, status__in=['EM_EXECUCAO', 'CONCLUIDO']
-            ).exclude(pk=item.pk).exists()
-            if nenhum_outro_ativo:
-                OrdemServico.objects.filter(pk=os.pk).update(
-                    status='EXECUCAO',
-                    data_inicio_execucao=timezone.now(),
-                )
 
         return Response(self.get_serializer(item).data)
 
