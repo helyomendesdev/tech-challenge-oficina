@@ -393,7 +393,10 @@ kubectl get hpa -n oficina
 
 ## Task 8: CI — Pipeline de Integracao Continua
 
-**Objetivo:** Executar lint, testes e build a cada push/PR na main
+**Objetivo:** Executar build, lint e testes a cada push/PR na main (Passos 1, 2, 3 do enunciado)
+
+**Por que:** O CI e a primeira barreira de qualidade. Roda rapido (<5 min) e da
+feedback imediato ao desenvolvedor. So passa para CD se o CI estiver verde.
 
 **Arquivo a criar:**
 - `.github/workflows/ci.yml`
@@ -408,7 +411,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  build-and-test:
     runs-on: ubuntu-latest
     
     services:
@@ -427,6 +430,7 @@ jobs:
           --health-retries 5
 
     steps:
+    # Passo 1: Build da aplicacao
     - uses: actions/checkout@v4
     
     - name: Set up Python
@@ -445,6 +449,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
+    - name: Django system check
+      run: python manage.py check --settings=app.settings_test
+    
+    # Passo 2: Execucao dos testes automatizados
     - name: Run tests
       env:
         DATABASE_URL: postgres://test_user:test_pass@localhost:5432/oficina_test
@@ -452,20 +460,15 @@ jobs:
         SECRET_KEY: test-key-not-for-production
       run: |
         python manage.py migrate
-        python -m pytest atendimento/tests/ -v --tb=short
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v5
+        python -m pytest atendimento/tests/ -v --tb=short --junitxml=report.xml
+    
+    - name: Upload test report
+      if: always()
+      uses: actions/upload-artifact@v4
       with:
-        python-version: "3.11"
-    - name: Install lint tools
-      run: pip install flake8
-    - name: Run linter
-      run: flake8 atendimento/ --max-line-length=100
+        name: test-report
+        path: report.xml
+```
 ```
 
 **Por que:**
@@ -480,7 +483,11 @@ jobs:
 
 ## Task 9: CD — Pipeline de Entrega Continua
 
-**Objetivo:** Buildar imagem Docker e fazer deploy no K8s apos merge na main
+**Objetivo:** Pipeline completa apos merge na main com todos os 6 passos do enunciado
+
+**Por que:** A CD executa o ciclo completo apos aprovacao do PR. Diferente do CI
+(que so testa), a CD faz o build da imagem, publica no registry e faz deploy
+no cluster. O deploy inclui tanto a aplicacao quanto o banco.
 
 **Arquivo a criar:**
 - `.github/workflows/cd.yml`
@@ -492,6 +499,10 @@ on:
   push:
     branches: [main]
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -499,6 +510,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    # --- Passo 1: Build da aplicacao ---
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -507,6 +519,10 @@ jobs:
     - name: Install dependencies
       run: pip install -r requirements.txt
     
+    - name: Django system check
+      run: python manage.py check --settings=app.settings_test
+    
+    # --- Passo 2: Execucao dos testes automatizados ---
     - name: Run tests
       env:
         DJANGO_SETTINGS_MODULE: app.settings_test
@@ -514,47 +530,73 @@ jobs:
       run: |
         python -m pytest atendimento/tests/ -v --tb=short --junitxml=report.xml
     
+    - name: Upload test report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-report
+        path: report.xml
+    
+    # --- Passo 3: Build da imagem Docker ---
     - name: Log in to GitHub Container Registry
       uses: docker/login-action@v3
       with:
-        registry: ghcr.io
+        registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=latest
+          type=sha,prefix={{date 'YYYYMMDD'}}-
     
     - name: Build and push Docker image
       uses: docker/build-push-action@v6
       with:
         context: .
         push: true
-        tags: |
-          ghcr.io/${{ github.repository }}:latest
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
     
+    # --- Passo 4: Deploy no cluster Kubernetes ---
+    # --- Passo 5: Deploy do banco de dados ---
+    # --- Passo 6: Aplicacao dos manifests YAML ---
     - name: Set up kubectl
       uses: azure/setup-kubectl@v4
       with:
         version: "latest"
     
-    - name: Deploy to Kubernetes
-      env:
-        KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
+    - name: Configure Kubeconfig
       run: |
         mkdir -p ~/.kube
-        echo "$KUBE_CONFIG" > ~/.kube/config
-        kubectl set image deployment/oficina-app -n oficina \
-          app=ghcr.io/${{ github.repository }}:${{ github.sha }} --record
+        echo "${{ secrets.KUBE_CONFIG }}" > ~/.kube/config
+    
+    - name: Deploy to Kubernetes
+      run: |
+        # Passo 5: Deploy do banco (StatefulSet + Service)
+        kubectl apply -f k8s/postgres-statefulset.yaml
+        kubectl apply -f k8s/postgres-service.yaml
+        
+        # Passo 4 + 6: Deploy da app + manifests completos
+        kubectl apply -f k8s/namespace.yaml
+        kubectl apply -f k8s/configmap.yaml
+        kubectl apply -f k8s/secret.yaml
+        kubectl apply -f k8s/deployment.yaml
+        kubectl apply -f k8s/service.yaml
+        kubectl apply -f k8s/hpa.yaml
+        
+        # Aguardar rollout completar
+        kubectl rollout status deployment/oficina-app -n oficina --timeout=120s
+    
+    - name: Verify deployment
+      run: |
+        kubectl get all -n oficina
+        kubectl get hpa -n oficina
 ```
-
-**Por que:**
-- **Trigger apenas na main:** So faz deploy quando o codigo e aprovado e mergeado.
-- **GHCR (GitHub Container Registry):** Registry integrado ao GitHub, sem custo
-  adicional. Alternativa: Docker Hub.
-- **`kubectl set image`:** Atualiza a imagem do deployment sem precisar reaplicar
-  o YAML inteiro. Dispara rolling update automaticamente.
-- **`--junitxml=report.xml:**** Gera relatorio de testes que aparece na UI do
-  GitHub Actions.
-- **`secrets.KUBE_CONFIG`:** Kubeconfig do cluster armazenado como secret no
-  repositorio (Settings > Secrets > Actions). Nunca versionado.
 
 ---
 

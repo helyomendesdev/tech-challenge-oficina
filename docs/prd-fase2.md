@@ -2,16 +2,23 @@
 
 **Product Requirements Document**
 **Data:** 2026-06-09
-**Projeto:** Tech Challenge — Oficina Mecanica (FIAP)
-**Versao:** 1.0
+**Projeto:** Tech Challenge — Oficina Mecanica (FIAP) — Fase 2
+**Versao:** 2.0 (alinhada ao enunciado oficial)
+**Peso na nota:** 60% de todas as disciplinas da fase
 
 ---
 
-## 1. Objetivo
+## 1. Objetivo (conforme enunciado)
 
-Evoluir o sistema de gestao de ordens de servico (MVP Fase 1) para uma arquitetura
-escalavel, resiliente e automatizada, aplicando Clean Architecture, containerizacao,
-orquestracao Kubernetes, Infrastructure as Code e pipeline CI/CD.
+Evoluir a aplicacao desenvolvida na Fase 1 para garantir qualidade, resiliencia e
+escalabilidade, incorporando praticas modernas de infraestrutura e automacao,
+visando:
+
+- Reduzir riscos operacionais por meio de infraestrutura escalavel
+- Automatizar o provisionamento e o deploy do ambiente
+- Melhorar a qualidade e a organizacao do codigo, mantendo a evolucao sustentavel
+- Preparar a aplicacao para suportar grandes volumes de ordens de servico em
+  horarios de pico, com escalabilidade dinamica
 
 ---
 
@@ -108,51 +115,106 @@ atendimento/
 
 ### 4.3 CI/CD (`.github/workflows/`) — Helio
 
-| Artefato | Descricao | Criterio de Aceite |
-|----------|-----------|-------------------|
-| `.github/workflows/ci.yml` | Trigger: push/PR na main. Etapas: lint, test, build | Workflow passa verde no GitHub |
-| `.github/workflows/cd.yml` | Trigger: merge na main. Etapas: build Docker, push registry, deploy K8s | Deploy executa apos merge |
+Pipeline obrigatoria deve executar em ordem:
+
+| Passo | Descricao | Criterio de Aceite |
+|-------|-----------|-------------------|
+| 1. Build da aplicacao | `pip install -r requirements.txt` + `python manage.py check` | Sem erros de compilacao/dependencias |
+| 2. Execucao dos testes automatizados | `pytest atendimento/tests/ -v --tb=short` | 194+ testes passando |
+| 3. Build da imagem Docker | `docker build -t app .` | Imagem criada sem erros |
+| 4. Deploy no cluster Kubernetes | `kubectl apply -f k8s/` | Todos os recursos criados no namespace `oficina` |
+| 5. Deploy do banco de dados | `kubectl apply -f k8s/postgres-*` | StatefulSet + Service do PostgreSQL criados |
+| 6. Aplicacao dos manifests YAML | `kubectl apply -f k8s/` (passo unificado com 4+5) | `kubectl get all -n oficina` mostra tudo Running |
+
+**Arquivos:**
+- `.github/workflows/ci.yml` — Trigger: push/PR em main. Passos 1, 2, 3.
+  Roda rapido (< 5 min) para dar feedback ao desenvolvedor.
+- `.github/workflows/cd.yml` — Trigger: merge na main. Passos 1 a 6 completos.
+  Roda deploy completo apos aprovacao do PR.
 
 ### 4.4 APIs — Sophia
 
+Requisito oficial: "Alterar/criar as seguintes APIs"
+
 | Endpoint | Descricao | Criterio de Aceite |
 |----------|-----------|-------------------|
-| `GET /api/v1/ordens-servico/fila/` | Ordenacao: Em Execucao > Aguardando Aprovacao > Diagnostico > Recebida. Mais antigas primeiro. Excluir finalizadas/entregues. | Resposta ordenada e filtrada conforme especificacao |
-| `POST /api/v1/orcamentos/notificacoes/` | Receber aprovacao/rejeicao externa do orcamento | OS atualiza status conforme resposta |
-| `POST /api/v1/ordens-servico/status-notificacoes/` | Atualizar status via ferramenta externa (email) | Status alterado apos notificacao |
+| `POST /api/v1/ordens-servico/abrir/` | Abertura de OS: receber cliente, veiculo, servicos e pecas. Retornar ID unico da OS. | ✅ Ja implementado (Lucas) |
+| `GET /api/v1/ordens-servico/{id}/status/` | Consultar status atual da OS (Recebida, Diagnostico, Aguardando Aprovacao, Execucao, Finalizada, Entregue) | ✅ Ja implementado (Lucas) |
+| `POST /api/v1/orcamentos/notificacoes/` | Aprovacao de orcamento: receber notificacoes externas de aprovacao ou recusa | ✅ Ja implementado (Lucas) |
+| `GET /api/v1/ordens-servico/fila/` | **Listagem de OS com ordenacao especifica:** Em Execucao > Aguardando Aprovacao > Diagnostico > Recebida. Mais antigas primeiro. Excluir (logica nao fisica) as finalizadas e entregues. | ⚠️ Verificar se a ordenacao segue exatamente esta prioridade |
+| `POST /api/v1/ordens-servico/status-notificacoes/` | Atualizacao de status da OS via ferramenta externa (ex: email) | ⚠️ Verificar implementacao |
+
+---
+## 5. Entregaveis Obrigatorios (conforme enunciado)
+
+| # | Entregavel | Responsavel | Status |
+|---|------------|-------------|--------|
+| 1 | Codigo-fonte refatorado (Clean Architecture + Hexagonal) | Lucas | ✅ PR #1 mergeado |
+| 2 | Dockerfile e docker-compose revisados | Luis | ⚠️ Pendente |
+| 3 | Manifestos Kubernetes em `/k8s/` | Helio | ⚠️ Pendente |
+| 4 | Scripts Terraform em `/infra/` | Luis | ⚠️ Pendente |
+| 5 | Pipeline CI/CD (`.github/workflows/`) | Helio | ⚠️ Pendente |
+| 6 | README.md atualizado (descricao, arquitetura, instrucoes locais/K8s/Terraform) | Grupo | ⚠️ Pendente |
+| 7 | Link collection Postman/Swagger no README | Grupo | ⚠️ Pendente |
+| 8 | Video demonstrativo (YouTube/Vimeo, ate 15 min): deploy, CI/CD, APIs, escalabilidade | Grupo | ⚠️ Pendente |
+| 9 | PDF de entrega no portal FIAP (link repositorio, desenho arquitetura, link video) | Grupo | ⚠️ Pendente |
 
 ---
 
-## 5. Arquitetura Alvo
+## 6. Arquitetura Alvo
+
+### Fluxo de Deploy (CI/CD)
 
 ```
-[Usuario] --> [GitHub Actions] --> [Docker Registry]
+[Dev] --> git push/PR --> GitHub Actions
+                             |
+                    +--------+--------+
+                    |                 |
+                    v                 v
+                CI (rapido)       CD (completo)
+              - Build app        - Build app
+              - Testes (194)     - Testes (194)
+              - Lint             - Build imagem Docker
+                                 - Push para GHCR
+                                 - kubectl apply -f k8s/
                                        |
                                        v
-                               [Cluster K8s]
-                              /              \
-                    [Deployment]         [PostgreSQL]
-                    (2-10 pods)         (StatefulSet)
-                          |
-                    [Service:8000]
-                          |
-                    [HPA: CPU>70%]
+                              +--------+--------+
+                              |                 |
+                              v                 v
+                         [Deployment]     [StatefulSet]
+                         oficina-app      postgres
+                         2-10 pods        1 pod + PVC
+                              |                 |
+                              v                 v
+                         [Service]         [Service]
+                         ClusterIP:8000    Headless:5432
+                              |
+                              v
+                         [HPA: CPU>70%]
+                         (escala 2->10)
 ```
 
-### Fluxo de Deploy
+### Componentes do Cluster
 
 ```
-1. Push/PR na main
-2. GitHub Actions:
-   a. Lint + Testes (194 testes)
-   b. Build imagem Docker
-   c. Push para registry (Docker Hub / GHCR)
-   d. Aplicar manifests K8s (`kubectl apply -f k8s/`)
-3. HPA gerencia escala automatica
+Namespace: oficina
+├── Deployment: oficina-app (2-10 replicas)
+│   ├── LivenessProbe: HTTP GET /
+│   ├── ReadinessProbe: HTTP GET /
+│   ├── StartupProbe: HTTP GET / (failureThreshold: 30)
+│   ├── ConfigMap: variaveis nao sensiveis
+│   ├── Secret: credenciais
+│   └── Resource: requests 250m/256Mi, limits 500m/512Mi
+├── Service: oficina-app (ClusterIP:8000)
+├── HPA: CPU > 70% (min 2, max 10)
+├── StatefulSet: postgres (1 replica)
+│   ├── PVC: 1Gi (ReadWriteOnce)
+│   └── LivenessProbe: pg_isready
+└── Service: oficina-db (Headless:5432)
 ```
 
 ---
-
 ## 6. Nao requisitos (deliberadamente excluido)
 
 - Nao havera frontend (apenas API REST)
