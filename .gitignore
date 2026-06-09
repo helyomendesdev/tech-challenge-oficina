@@ -1,39 +1,44 @@
-# Ambientes Virtuais
-venv/
-env/
-.venv/
-
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+.Python
 *$py.class
 
-# Django (Segurança - Aula 1 e 6 de Dev Seguro)
+# Environments
+.venv/
+venv/
+env/
+
+# Env
 .env
+!.env.example
+
+# Django
+*.log
 db.sqlite3
 ruvector.db
 media/
 staticfiles/
 
-# Logs do Sistema (Requisito de Qualidade)
-oficina_atividades.log
+# Tests / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+schema.yml
 
-# IDEs
+# IDE
 .vscode/
 .idea/
-.DS_Store
 
+# OS
+.DS_Store
+Thumbs.db
+
+# Security / analysis generated files
 relatorio_vulnerabilidades.txt
 seguranca_atendimento.txt
 seguranca_settings.txt
-# Artefatos de teste e cobertura
-.coverage
-htmlcov/
-.pytest_cache/
-coverage.xml
-
-# SonarQube
 .scannerwork/
-
-# Log gerado em runtime
-officina_atividades.log

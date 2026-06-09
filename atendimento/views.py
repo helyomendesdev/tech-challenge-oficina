@@ -3,11 +3,12 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from rest_framework import viewsets, mixins, status as drf_status
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
-from .models import Cliente, Veiculo, OrdemServico, Servico, Peca, ItemPecaOS, ItemServicoOS, ConsumoItemServico
+from .models import Cliente, Veiculo, OrdemServico, Servico, Peca, ItemPecaOS, ItemServicoOS
 from .serializers import (
     ClienteSerializer,
     VeiculoSerializer,
     OrdemServicoSerializer,
+    OrdemServicoPublicaSerializer,
     ServicoSerializer,
     PecaSerializer,
     ItemPecaOSSerializer,
@@ -21,7 +22,74 @@ from .throttles import ConsultaClienteThrottle
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from django.db.models import F, Q
+from django.db.models import Q
+import re
+from atendimento.application.dtos import (
+    FinalizarServicoInputDTO,
+    IniciarServicoInputDTO,
+)
+from atendimento.exceptions import resposta_erro
+from atendimento.domain.enums import StatusItemServico
+from atendimento.domain.exceptions import DomainError, OrdemServicoNaoEncontradaError
+from atendimento.domain.value_objects import DocumentoCliente, PlacaVeiculo
+from atendimento.infrastructure.factories import (
+    build_finalizar_servico_use_case,
+    build_iniciar_servico_use_case,
+)
+
+
+def _bad_request(mensagem):
+    """Resposta padrao para erros de regra em actions legadas."""
+    return Response(
+        resposta_erro(mensagem, drf_status.HTTP_400_BAD_REQUEST),
+        status=drf_status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def _not_found(mensagem):
+    """Resposta padrao para recursos inacessiveis ou inexistentes."""
+    return Response(
+        resposta_erro(mensagem, drf_status.HTTP_404_NOT_FOUND),
+        status=drf_status.HTTP_404_NOT_FOUND,
+    )
+
+
+def _normalizar_identificador_publico(identificador):
+    """Normaliza placa/CPF/CNPJ usando value objects quando possivel."""
+    valor = str(identificador or "").strip()
+    documento_digits = re.sub(r'\D', '', valor)
+    placas = {valor.upper()}
+    documentos = {valor, documento_digits, _formatar_documento(documento_digits)}
+
+    try:
+        placas.add(PlacaVeiculo(valor).valor)
+    except DomainError:
+        pass
+
+    try:
+        documentos.add(DocumentoCliente(valor).valor)
+    except DomainError:
+        pass
+
+    return {
+        "placas": {placa for placa in placas if placa},
+        "documentos": {documento for documento in documentos if documento},
+    }
+
+
+def _formatar_documento(documento):
+    """Retorna CPF/CNPJ pontuado para compatibilidade com registros legados."""
+    if len(documento) == 11:
+        return (
+            f"{documento[:3]}.{documento[3:6]}."
+            f"{documento[6:9]}-{documento[9:]}"
+        )
+    if len(documento) == 14:
+        return (
+            f"{documento[:2]}.{documento[2:5]}.{documento[5:8]}/"
+            f"{documento[8:12]}-{documento[12:]}"
+        )
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +105,11 @@ class OwnedQuerySetMixin:
     def get_queryset(self):
         qs = super().get_queryset()
         user = self.request.user
-        if user and user.is_authenticated and not user.is_staff:
+        if (
+            user
+            and user.is_authenticated
+            and not (user.is_staff or user.is_superuser)
+        ):
             qs = qs.filter(created_by=user)
         return qs
 
@@ -118,13 +190,14 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     ordering_fields = ['data_abertura', 'data_finalizacao', 'valor_total', 'status']
     ordering = ['-data_abertura']
 
-    def _execute_transition(self, pk, method_name):
-        os = self.get_object()
+    def _execute_transition(self, method_name):
+        """Ponte temporaria para transicoes ainda mantidas no model legado."""
+        ordem_servico = self.get_object()
         try:
-            getattr(os, method_name)()
+            getattr(ordem_servico, method_name)()
         except ValidationError as exc:
-            return Response({'erro': ' '.join(exc.messages)}, status=drf_status.HTTP_400_BAD_REQUEST)
-        return Response(OrdemServicoSerializer(os).data)
+            return _bad_request(' '.join(exc.messages))
+        return Response(self.get_serializer(ordem_servico).data)
 
     @extend_schema(
         description=(
@@ -139,7 +212,7 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
                 type=str
             )
         ],
-        responses={200: OrdemServicoSerializer},
+        responses={200: OrdemServicoPublicaSerializer},
         auth=[]
     )
     @action(
@@ -154,41 +227,48 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
 
         if not identificador:
             return Response(
-                {"erro": "Informe a placa ou o CPF/CNPJ para consulta."},
-                status=400
+                resposta_erro(
+                    "Informe a placa ou o CPF/CNPJ para consulta.",
+                    drf_status.HTTP_400_BAD_REQUEST,
+                ),
+                status=drf_status.HTTP_400_BAD_REQUEST,
             )
 
+        identificadores = _normalizar_identificador_publico(identificador)
         os_list = (
             OrdemServico.objects
             .select_related('cliente', 'veiculo')
-            .prefetch_related('servicos', 'itens_pecas__peca')
+            .prefetch_related('itens_servico__servico', 'itens_pecas__peca')
             .filter(
-                Q(veiculo__placa=identificador.upper()) |
-                Q(cliente__documento=identificador)
+                Q(veiculo__placa__in=identificadores["placas"]) |
+                Q(cliente__documento__in=identificadores["documentos"])
             )
             .order_by('-data_abertura')
         )
 
         if not os_list.exists():
             return Response(
-                {"erro": "Nenhuma Ordem de Serviço encontrada para este identificador."},
-                status=404
+                resposta_erro(
+                    "Nenhuma Ordem de Serviço encontrada para este identificador.",
+                    drf_status.HTTP_404_NOT_FOUND,
+                ),
+                status=drf_status.HTTP_404_NOT_FOUND,
             )
 
         page = self.paginate_queryset(os_list)
         if page is not None:
-            serializer = self.get_serializer(page, many=True)
+            serializer = OrdemServicoPublicaSerializer(page, many=True)
             return self.get_paginated_response(serializer.data)
 
-        serializer = self.get_serializer(os_list, many=True)
+        serializer = OrdemServicoPublicaSerializer(os_list, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'], url_path='metricas')
     def metricas(self, request, pk=None):
-        os = self.get_object()
+        ordem_servico = self.get_object()
         qs = (
             ItemServicoOS.objects
-            .filter(ordem_servico=os)
+            .filter(ordem_servico=ordem_servico)
             .select_related('servico')
             .prefetch_related('consumos__item_peca_os__peca')
             .order_by('id')
@@ -198,44 +278,50 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
             try:
                 qs = qs.filter(servico_id=int(servico_id))
             except (ValueError, TypeError):
-                return Response({'erro': "'servico' deve ser um inteiro."}, status=drf_status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    resposta_erro(
+                        "'servico' deve ser um inteiro.",
+                        drf_status.HTTP_400_BAD_REQUEST,
+                    ),
+                    status=drf_status.HTTP_400_BAD_REQUEST,
+                )
         serializer = MetricasItemServicoSerializer(qs, many=True)
         return Response(serializer.data)
 
     @extend_schema(description="Inicia o diagnóstico da OS. Transição: RECEBIDA → DIAGNOSTICO.")
     @action(detail=True, methods=['post'], url_path='iniciar-diagnostico')
     def iniciar_diagnostico(self, request, pk=None):
-        return self._execute_transition(pk, 'iniciar_diagnostico')
+        return self._execute_transition('iniciar_diagnostico')
 
     @extend_schema(description="Finaliza o diagnóstico e aguarda aprovação do orçamento. Transição: DIAGNOSTICO → AGUARDANDO.")
     @action(detail=True, methods=['post'], url_path='finalizar-diagnostico')
     def finalizar_diagnostico(self, request, pk=None):
-        return self._execute_transition(pk, 'finalizar_diagnostico')
+        return self._execute_transition('finalizar_diagnostico')
 
     @extend_schema(description="Registra aprovação do orçamento pelo cliente. Transição: AGUARDANDO → EXECUCAO.")
     @action(detail=True, methods=['post'], url_path='aprovar-orcamento')
     def aprovar_orcamento(self, request, pk=None):
-        return self._execute_transition(pk, 'aprovar_orcamento')
+        return self._execute_transition('aprovar_orcamento')
 
     @extend_schema(description="Registra recusa do orçamento; OS retorna para diagnóstico. Transição: AGUARDANDO → DIAGNOSTICO.")
     @action(detail=True, methods=['post'], url_path='recusar-orcamento')
     def recusar_orcamento(self, request, pk=None):
-        return self._execute_transition(pk, 'recusar_orcamento')
+        return self._execute_transition('recusar_orcamento')
 
     @extend_schema(description="Finaliza a OS quando todos os serviços estão concluídos. Transição: EXECUCAO → FINALIZADA.")
     @action(detail=True, methods=['post'], url_path='finalizar')
     def finalizar(self, request, pk=None):
-        return self._execute_transition(pk, 'finalizar')
+        return self._execute_transition('finalizar')
 
     @extend_schema(description="Registra entrega do veículo ao cliente. Transição: FINALIZADA → ENTREGUE.")
     @action(detail=True, methods=['post'], url_path='entregar')
     def entregar(self, request, pk=None):
-        return self._execute_transition(pk, 'entregar')
+        return self._execute_transition('entregar')
 
     @extend_schema(description="Registra desistência do cliente. Transição: AGUARDANDO → CANCELADA.")
     @action(detail=True, methods=['post'], url_path='cancelar')
     def cancelar(self, request, pk=None):
-        return self._execute_transition(pk, 'cancelar')
+        return self._execute_transition('cancelar')
 
 
 @extend_schema_view(
@@ -259,136 +345,86 @@ class ItemServicoOSViewSet(
 ):
     serializer_class = ItemServicoOSSerializer
 
-    def _get_os(self):
+    def _get_ordem_servico(self):
         user = self.request.user
-        qs = OrdemServico.objects.all()
-        if not user.is_staff:
-            qs = qs.filter(created_by=user)
-        return get_object_or_404(qs, pk=self.kwargs['os_pk'])
+        queryset = OrdemServico.objects.all()
+        if not (user.is_staff or user.is_superuser):
+            queryset = queryset.filter(created_by=user)
+        return get_object_or_404(queryset, pk=self.kwargs['os_pk'])
 
     def get_queryset(self):
-        os = self._get_os()
+        if getattr(self, 'swagger_fake_view', False):
+            return ItemServicoOS.objects.none()
+
+        ordem_servico = self._get_ordem_servico()
         return ItemServicoOS.objects.filter(
-            ordem_servico=os
+            ordem_servico=ordem_servico
         ).select_related('servico', 'ordem_servico').order_by('id')
 
     def perform_create(self, serializer):
-        os = self._get_os()
-        serializer.save(ordem_servico=os, created_by=self.request.user)
+        ordem_servico = self._get_ordem_servico()
+        serializer.save(ordem_servico=ordem_servico, created_by=self.request.user)
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        if instance.status != 'PENDENTE':
-            return Response(
-                {'erro': 'Não é possível remover serviço em execução ou concluído'},
-                status=drf_status.HTTP_400_BAD_REQUEST,
+        if instance.status != StatusItemServico.PENDENTE.value:
+            return _bad_request(
+                'Não é possível remover serviço em execução ou concluído'
             )
         return super().destroy(request, *args, **kwargs)
 
+    def _usuario_contexto(self):
+        user = self.request.user
+        return {
+            'usuario_id': user.id if user and user.is_authenticated else None,
+            'usuario_is_staff': bool(
+                user and user.is_authenticated and (user.is_staff or user.is_superuser)
+            ),
+        }
+
     @action(detail=True, methods=['post'])
     def iniciar(self, request, os_pk=None, pk=None):
-        item = self.get_object()
-
-        if item.status != 'PENDENTE':
-            return Response(
-                {'erro': 'Serviço já foi iniciado ou concluído'},
-                status=drf_status.HTTP_400_BAD_REQUEST,
-            )
-
         serializer = IniciarServicoSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        data_inicio = serializer.validated_data.get('data_inicio') or timezone.now()
-        pecas_input = serializer.validated_data.get('pecas', [])
-
-        consumos_a_criar = []
-        for entrada in pecas_input:
-            try:
-                item_peca = ItemPecaOS.objects.get(
-                    pk=entrada['item_peca_os_id'], os=item.ordem_servico
-                )
-            except ItemPecaOS.DoesNotExist:
-                return Response(
-                    {'erro': f"Peça {entrada['item_peca_os_id']} não pertence a esta OS"},
-                    status=drf_status.HTTP_400_BAD_REQUEST,
-                )
-
-            disponivel = item_peca.quantidade - item_peca.quantidade_utilizada
-            if entrada['quantidade'] > disponivel:
-                return Response(
-                    {
-                        'erro': (
-                            f"Quantidade indisponível para '{item_peca.peca.nome}'. "
-                            f"Disponível: {disponivel}, solicitado: {entrada['quantidade']}"
-                        )
-                    },
-                    status=drf_status.HTTP_400_BAD_REQUEST,
-                )
-            consumos_a_criar.append((item_peca, entrada['quantidade']))
-
-        for item_peca, quantidade in consumos_a_criar:
-            ConsumoItemServico.objects.create(
-                item_servico_os=item,
-                item_peca_os=item_peca,
-                quantidade=quantidade,
-            )
-            ItemPecaOS.objects.filter(pk=item_peca.pk).update(
-                quantidade_utilizada=F('quantidade_utilizada') + quantidade
-            )
-
-        ItemServicoOS.objects.filter(pk=item.pk).update(
-            status='EM_EXECUCAO',
-            data_inicio=data_inicio,
+        input_dto = IniciarServicoInputDTO(
+            ordem_servico_id=os_pk,
+            item_servico_id=pk,
+            data_inicio=(
+                serializer.validated_data.get('data_inicio') or timezone.now()
+            ),
+            pecas=serializer.validated_data.get('pecas', []),
+            **self._usuario_contexto(),
         )
-        item.refresh_from_db()
+
+        try:
+            item = build_iniciar_servico_use_case().execute(input_dto)
+        except OrdemServicoNaoEncontradaError as exc:
+            return _not_found(str(exc))
+        except DomainError as exc:
+            return _bad_request(str(exc))
 
         return Response(self.get_serializer(item).data)
 
     @action(detail=True, methods=['post'])
     def finalizar(self, request, os_pk=None, pk=None):
-        item = self.get_object()
-
-        if item.status != 'EM_EXECUCAO':
-            return Response(
-                {'erro': 'Serviço não está em execução'},
-                status=drf_status.HTTP_400_BAD_REQUEST,
-            )
-
         serializer = FinalizarServicoSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        data_finalizacao = serializer.validated_data.get('data_finalizacao') or timezone.now()
-        os = item.ordem_servico
-
-        ainda_ha_ativo = ItemServicoOS.objects.filter(
-            ordem_servico=os, status__in=['PENDENTE', 'EM_EXECUCAO']
-        ).exclude(pk=item.pk).exists()
-
-        if not ainda_ha_ativo:
-            pecas_nao_utilizadas = os.itens_pecas.exclude(
-                quantidade_utilizada=F('quantidade')
-            ).exists()
-            if pecas_nao_utilizadas:
-                return Response(
-                    {'erro': 'Existem peças não utilizadas na OS'},
-                    status=drf_status.HTTP_400_BAD_REQUEST,
-                )
-
-        ItemServicoOS.objects.filter(pk=item.pk).update(
-            status='CONCLUIDO',
-            data_finalizacao=data_finalizacao,
+        input_dto = FinalizarServicoInputDTO(
+            ordem_servico_id=os_pk,
+            item_servico_id=pk,
+            data_finalizacao=(
+                serializer.validated_data.get('data_finalizacao') or timezone.now()
+            ),
+            **self._usuario_contexto(),
         )
-        item.refresh_from_db()
 
-        # item is already CONCLUIDO in the DB (updated above), so no need to exclude(pk=item.pk)
-        todos_concluidos = not ItemServicoOS.objects.filter(
-            ordem_servico=os
-        ).exclude(status='CONCLUIDO').exists()
-
-        if todos_concluidos:
-            OrdemServico.objects.filter(pk=os.pk).update(
-                status='FINALIZADA',
-                data_finalizacao=data_finalizacao,
-            )
+        try:
+            item = build_finalizar_servico_use_case().execute(input_dto)
+        except OrdemServicoNaoEncontradaError as exc:
+            return _not_found(str(exc))
+        except DomainError as exc:
+            return _bad_request(str(exc))
 
         return Response(self.get_serializer(item).data)

@@ -2,7 +2,7 @@
   "info": {
     "name": "Oficina Mecânica API",
     "_postman_id": "oficina-api-v1",
-    "description": "Collection completa para testar a API do Tech Challenge Fase 1 - FIAP.\n\n**Como usar:**\n1. Importe também o arquivo `postman_environment.json`\n2. Selecione o environment \"Oficina Local\"\n3. Execute \"Obter Token\" primeiro — o token é salvo automaticamente\n4. Todas as demais requisições já usam o token automaticamente\n\n**IDs de referência (seed_data):**\n- OS 8: AGUARDANDO — serviços pk=5 (Revisão, PENDENTE) e pk=6 (Pastilha, PENDENTE), peça pk=10\n- OS 9: EXECUCAO — serviço pk=7 (Alinhamento, EM_EXECUCAO), peça pk=6 (Pastilha×2, 100% utilizada)\n- OS 10: FINALIZADA — serviço pk=8 (Correia, CONCLUIDO) com 32h de execução",
+    "description": "Collection completa para testar a API do Tech Challenge Fase 1 e os endpoints novos da Fase 2 - FIAP.\n\n**Como usar:**\n1. Importe também o arquivo `postman_environment.json`\n2. Selecione o environment \"Oficina Local\"\n3. Execute \"Obter Token\" primeiro — o token é salvo automaticamente\n4. Todas as demais requisições já usam o token automaticamente\n\n**IDs de referência (seed_data):**\n- OS 8: AGUARDANDO — serviços pk=5 (Revisão, PENDENTE) e pk=6 (Pastilha, PENDENTE), peça pk=10\n- OS 9: EXECUCAO — serviço pk=7 (Alinhamento, EM_EXECUCAO), peça pk=6 (Pastilha×2, 100% utilizada)\n- OS 10: FINALIZADA — serviço pk=8 (Correia, CONCLUIDO) com 32h de execução",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -41,10 +41,15 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -52,8 +57,14 @@
             },
             "url": {
               "raw": "{{base_url}}/api/token/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "token", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "token",
+                ""
+              ]
             },
             "description": "Autentica com usuário/senha e salva o `access_token` e `refresh_token` automaticamente no environment."
           }
@@ -76,10 +87,15 @@
             }
           ],
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -87,11 +103,648 @@
             },
             "url": {
               "raw": "{{base_url}}/api/token/refresh/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "token", "refresh", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "token",
+                "refresh",
+                ""
+              ]
             },
             "description": "Usa o refresh_token para obter um novo access_token sem precisar reautenticar."
           }
+        }
+      ]
+    },
+    {
+      "name": "Fase 2 - Arquitetura Hibrida",
+      "description": "Endpoints novos da Fase 2 no monolito modular Django com Clean/Hexagonal pragmatica. Todos usam Bearer token (`{{access_token}}`) e coexistem com as rotas antigas do DefaultRouter.",
+      "item": [
+        {
+          "name": "Abertura completa de OS",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/abrir/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "abrir",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cliente\": {\n    \"nome\": \"Helio Teste\",\n    \"documento\": \"529.982.247-25\",\n    \"email\": \"helio@example.com\",\n    \"telefone\": \"11999999999\"\n  },\n  \"veiculo\": {\n    \"placa\": \"abc1d23\",\n    \"marca\": \"Volkswagen\",\n    \"modelo\": \"Golf\",\n    \"ano\": 2024\n  },\n  \"servicos\": [\n    1,\n    2\n  ],\n  \"pecas\": [\n    {\n      \"peca_id\": 1,\n      \"quantidade\": 2\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Cria ou reutiliza cliente e veiculo, cria OS com status RECEBIDA, adiciona servicos e pecas, baixa estoque uma unica vez pelo ItemPecaOS e recalcula valor_total."
+          },
+          "response": [
+            {
+              "name": "201 - OS criada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/abrir/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "abrir",
+                    ""
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"cliente\": {\n    \"nome\": \"Helio Teste\",\n    \"documento\": \"529.982.247-25\",\n    \"email\": \"helio@example.com\",\n    \"telefone\": \"11999999999\"\n  },\n  \"veiculo\": {\n    \"placa\": \"abc1d23\",\n    \"marca\": \"Volkswagen\",\n    \"modelo\": \"Golf\",\n    \"ano\": 2024\n  },\n  \"servicos\": [\n    1,\n    2\n  ],\n  \"pecas\": [\n    {\n      \"peca_id\": 1,\n      \"quantidade\": 2\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Cria ou reutiliza cliente e veiculo, cria OS com status RECEBIDA, adiciona servicos e pecas, baixa estoque uma unica vez pelo ItemPecaOS e recalcula valor_total."
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ordem_servico_id\": 12,\n  \"status\": \"RECEBIDA\",\n  \"valor_total\": \"221.00\",\n  \"mensagem\": \"Ordem de servico aberta com sucesso.\"\n}"
+            },
+            {
+              "name": "400 - Documento invalido",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/abrir/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "abrir",
+                    ""
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"cliente\": {\n    \"nome\": \"Helio Teste\",\n    \"documento\": \"529.982.247-25\",\n    \"email\": \"helio@example.com\",\n    \"telefone\": \"11999999999\"\n  },\n  \"veiculo\": {\n    \"placa\": \"abc1d23\",\n    \"marca\": \"Volkswagen\",\n    \"modelo\": \"Golf\",\n    \"ano\": 2024\n  },\n  \"servicos\": [\n    1,\n    2\n  ],\n  \"pecas\": [\n    {\n      \"peca_id\": 1,\n      \"quantidade\": 2\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Cria ou reutiliza cliente e veiculo, cria OS com status RECEBIDA, adiciona servicos e pecas, baixa estoque uma unica vez pelo ItemPecaOS e recalcula valor_total."
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"erro\": true,\n  \"status_code\": 400,\n  \"mensagem\": \"CPF invalido.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Consulta de status da OS",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/status/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "{{os_id}}",
+                "status",
+                ""
+              ]
+            },
+            "description": "Retorna status, descricao, datas e valor_total da OS. Usuario comum so acessa OS criada por ele; staff/superuser acessa todas."
+          },
+          "response": [
+            {
+              "name": "200 - Status retornado",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/status/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "{{os_id}}",
+                    "status",
+                    ""
+                  ]
+                },
+                "description": "Retorna status, descricao, datas e valor_total da OS. Usuario comum so acessa OS criada por ele; staff/superuser acessa todas."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ordem_servico_id\": 12,\n  \"status\": \"RECEBIDA\",\n  \"descricao\": \"Recebida\",\n  \"data_abertura\": \"2026-05-24T15:00:00-03:00\",\n  \"data_inicio_execucao\": null,\n  \"data_finalizacao\": null,\n  \"valor_total\": \"221.00\"\n}"
+            },
+            {
+              "name": "404 - OS nao encontrada ou inacessivel",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/status/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "{{os_id}}",
+                    "status",
+                    ""
+                  ]
+                },
+                "description": "Retorna status, descricao, datas e valor_total da OS. Usuario comum so acessa OS criada por ele; staff/superuser acessa todas."
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"erro\": true,\n  \"status_code\": 404,\n  \"mensagem\": \"Ordem de servico nao encontrada.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Fila operacional de OS",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/fila/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "fila",
+                ""
+              ]
+            },
+            "description": "Lista somente EXECUCAO, AGUARDANDO, DIAGNOSTICO e RECEBIDA, nesta prioridade, com mais antigas primeiro dentro do mesmo status."
+          },
+          "response": [
+            {
+              "name": "200 - Fila operacional",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/fila/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "fila",
+                    ""
+                  ]
+                },
+                "description": "Lista somente EXECUCAO, AGUARDANDO, DIAGNOSTICO e RECEBIDA, nesta prioridade, com mais antigas primeiro dentro do mesmo status."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "[\n  {\n    \"ordem_servico_id\": 9,\n    \"cliente_nome\": \"Ana Costa\",\n    \"veiculo_placa\": \"JKL4M56\",\n    \"status\": \"EXECUCAO\",\n    \"data_abertura\": \"2026-05-24T14:00:00-03:00\",\n    \"valor_total\": \"320.00\"\n  }\n]"
+            },
+            {
+              "name": "401 - Token ausente",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/fila/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "fila",
+                    ""
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"erro\": true,\n  \"status_code\": 401,\n  \"mensagem\": \"As credenciais de autenticacao nao foram fornecidas.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Notificacao de aprovacao/recusa de orcamento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/orcamentos/notificacoes/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orcamentos",
+                "notificacoes",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordem_servico_id\": 8,\n  \"decisao\": \"APROVADO\",\n  \"origem\": \"email\",\n  \"token\": \"simulado-opcional\",\n  \"motivo\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Endpoint autenticado que simula decisao externa. APROVADO faz AGUARDANDO -> EXECUCAO; RECUSADO faz AGUARDANDO -> DIAGNOSTICO."
+          },
+          "response": [
+            {
+              "name": "200 - Orcamento aprovado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/orcamentos/notificacoes/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orcamentos",
+                    "notificacoes",
+                    ""
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ordem_servico_id\": 8,\n  \"decisao\": \"APROVADO\",\n  \"origem\": \"email\",\n  \"token\": \"simulado-opcional\",\n  \"motivo\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Endpoint autenticado que simula decisao externa. APROVADO faz AGUARDANDO -> EXECUCAO; RECUSADO faz AGUARDANDO -> DIAGNOSTICO."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ordem_servico_id\": 8,\n  \"status_anterior\": \"AGUARDANDO\",\n  \"status_atual\": \"EXECUCAO\",\n  \"mensagem\": \"Orcamento aprovado com sucesso.\"\n}"
+            },
+            {
+              "name": "400 - OS fora de AGUARDANDO",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/orcamentos/notificacoes/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "orcamentos",
+                    "notificacoes",
+                    ""
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ordem_servico_id\": 8,\n  \"decisao\": \"APROVADO\",\n  \"origem\": \"email\",\n  \"token\": \"simulado-opcional\",\n  \"motivo\": \"\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Endpoint autenticado que simula decisao externa. APROVADO faz AGUARDANDO -> EXECUCAO; RECUSADO faz AGUARDANDO -> DIAGNOSTICO."
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"erro\": true,\n  \"status_code\": 400,\n  \"mensagem\": \"O orcamento so pode ser processado quando a OS esta AGUARDANDO.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Atualizacao de status por notificacao",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/status-notificacoes/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "status-notificacoes",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordem_servico_id\": 8,\n  \"novo_status\": \"DIAGNOSTICO\",\n  \"origem\": \"painel-externo\",\n  \"observacao\": \"Atualizacao simulada da Fase 2\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Simula atualizacao externa de status. Valida transicao por policy e, ao FINALIZADA, exige servicos CONCLUIDO e pecas totalmente utilizadas."
+          },
+          "response": [
+            {
+              "name": "200 - Status atualizado",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/status-notificacoes/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "status-notificacoes",
+                    ""
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ordem_servico_id\": 8,\n  \"novo_status\": \"DIAGNOSTICO\",\n  \"origem\": \"painel-externo\",\n  \"observacao\": \"Atualizacao simulada da Fase 2\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Simula atualizacao externa de status. Valida transicao por policy e, ao FINALIZADA, exige servicos CONCLUIDO e pecas totalmente utilizadas."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"ordem_servico_id\": 8,\n  \"status_anterior\": \"AGUARDANDO\",\n  \"status_atual\": \"DIAGNOSTICO\",\n  \"mensagem\": \"Status atualizado por notificacao simulada.\"\n}"
+            },
+            {
+              "name": "400 - Finalizacao bloqueada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/ordens-servico/status-notificacoes/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "status-notificacoes",
+                    ""
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ordem_servico_id\": 8,\n  \"novo_status\": \"DIAGNOSTICO\",\n  \"origem\": \"painel-externo\",\n  \"observacao\": \"Atualizacao simulada da Fase 2\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Simula atualizacao externa de status. Valida transicao por policy e, ao FINALIZADA, exige servicos CONCLUIDO e pecas totalmente utilizadas."
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"erro\": true,\n  \"status_code\": 400,\n  \"mensagem\": \"Nao e possivel finalizar a OS: existem servicos nao concluidos.\"\n}"
+            }
+          ]
         }
       ]
     },
@@ -105,8 +758,15 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/clientes/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "clientes", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clientes",
+                ""
+              ]
             }
           }
         },
@@ -116,8 +776,16 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/clientes/2/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "clientes", "2", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clientes",
+                "2",
+                ""
+              ]
             },
             "description": "Retorna os dados de um cliente específico."
           }
@@ -127,7 +795,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -135,8 +806,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/clientes/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "clientes", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clientes",
+                ""
+              ]
             },
             "description": "CPF deve ser válido (algoritmo Receita Federal). Sem pontuação."
           }
@@ -146,7 +824,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -154,8 +835,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/clientes/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "clientes", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clientes",
+                ""
+              ]
             },
             "description": "CNPJ deve ter 14 dígitos sem pontuação."
           }
@@ -165,7 +853,10 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -173,8 +864,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/clientes/2/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "clientes", "2", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clientes",
+                "2",
+                ""
+              ]
             }
           }
         },
@@ -183,7 +882,10 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -191,8 +893,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/clientes/2/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "clientes", "2", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clientes",
+                "2",
+                ""
+              ]
             },
             "description": "Atualiza apenas os campos enviados."
           }
@@ -203,8 +913,16 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/api/v1/clientes/99/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "clientes", "99", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clientes",
+                "99",
+                ""
+              ]
             },
             "description": "⚠️ Use um ID sem OS vinculada para não violar a restrição PROTECT."
           }
@@ -214,7 +932,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -222,8 +943,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/clientes/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "clientes", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clientes",
+                ""
+              ]
             },
             "description": "Deve retornar 400 com mensagem de CPF inválido."
           }
@@ -240,8 +968,15 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/veiculos/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "veiculos", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "veiculos",
+                ""
+              ]
             }
           }
         },
@@ -251,8 +986,16 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/veiculos/2/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "veiculos", "2", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "veiculos",
+                "2",
+                ""
+              ]
             }
           }
         },
@@ -261,7 +1004,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -269,8 +1015,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/veiculos/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "veiculos", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "veiculos",
+                ""
+              ]
             },
             "description": "Formato antigo: 3 letras + 4 números (ABC1234)."
           }
@@ -280,7 +1033,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -288,8 +1044,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/veiculos/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "veiculos", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "veiculos",
+                ""
+              ]
             },
             "description": "Formato Mercosul: 3 letras + 1 número + 1 letra + 2 números (ABC1D23)."
           }
@@ -299,7 +1062,10 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -307,8 +1073,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/veiculos/5/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "veiculos", "5", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "veiculos",
+                "5",
+                ""
+              ]
             }
           }
         },
@@ -318,8 +1092,16 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/api/v1/veiculos/99/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "veiculos", "99", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "veiculos",
+                "99",
+                ""
+              ]
             }
           }
         },
@@ -328,7 +1110,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -336,8 +1121,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/veiculos/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "veiculos", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "veiculos",
+                ""
+              ]
             },
             "description": "Deve retornar 400 com mensagem de placa inválida."
           }
@@ -354,8 +1146,15 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/servicos/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "servicos", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servicos",
+                ""
+              ]
             }
           }
         },
@@ -365,8 +1164,16 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/servicos/1/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "servicos", "1", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servicos",
+                "1",
+                ""
+              ]
             }
           }
         },
@@ -375,7 +1182,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -383,8 +1193,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/servicos/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "servicos", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servicos",
+                ""
+              ]
             }
           }
         },
@@ -393,7 +1210,10 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -401,8 +1221,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/servicos/1/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "servicos", "1", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servicos",
+                "1",
+                ""
+              ]
             }
           }
         },
@@ -411,7 +1239,10 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -419,8 +1250,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/servicos/1/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "servicos", "1", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servicos",
+                "1",
+                ""
+              ]
             }
           }
         },
@@ -430,8 +1269,16 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/api/v1/servicos/99/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "servicos", "99", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "servicos",
+                "99",
+                ""
+              ]
             }
           }
         }
@@ -447,8 +1294,15 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/pecas/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "pecas", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pecas",
+                ""
+              ]
             }
           }
         },
@@ -458,8 +1312,16 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/pecas/3/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "pecas", "3", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pecas",
+                "3",
+                ""
+              ]
             },
             "description": "Retorna detalhes da peça incluindo `estoque_atual`."
           }
@@ -469,7 +1331,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -477,8 +1342,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/pecas/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "pecas", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pecas",
+                ""
+              ]
             }
           }
         },
@@ -487,7 +1359,10 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -495,8 +1370,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/pecas/6/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "pecas", "6", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pecas",
+                "6",
+                ""
+              ]
             },
             "description": "Atualiza o estoque do Óleo Motor 5W30 para 30 unidades."
           }
@@ -506,7 +1389,10 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -514,8 +1400,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/pecas/4/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "pecas", "4", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pecas",
+                "4",
+                ""
+              ]
             }
           }
         },
@@ -525,8 +1419,16 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/api/v1/pecas/99/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "pecas", "99", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pecas",
+                "99",
+                ""
+              ]
             }
           }
         }
@@ -542,8 +1444,15 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                ""
+              ]
             }
           }
         },
@@ -553,8 +1462,16 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/9/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "9", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "9",
+                ""
+              ]
             },
             "description": "OS 9 está em EXECUCAO com Alinhamento e Balanceamento em andamento e pastilhas consumidas."
           }
@@ -564,7 +1481,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -572,8 +1492,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                ""
+              ]
             },
             "description": "Cria uma OS. Serviços são adicionados depois via POST /ordens-servico/{id}/servicos/. O `valor_total` é calculado automaticamente."
           }
@@ -583,7 +1510,10 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -591,8 +1521,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/6/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "6", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "6",
+                ""
+              ]
             }
           }
         },
@@ -601,7 +1539,10 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -609,8 +1550,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/6/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "6", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "6",
+                ""
+              ]
             }
           }
         },
@@ -619,7 +1568,10 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -627,10 +1579,18 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/6/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "6", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "6",
+                ""
+              ]
             },
-            "description": "Ao mudar para EXECUCAO, o campo `data_inicio_execucao` é preenchido automaticamente.\n\nNota: ao usar POST /servicos/{id}/iniciar/ no primeiro serviço da OS, a transição ocorre automaticamente."
+            "description": "Ao aprovar o orcamento, a OS muda de AGUARDANDO para EXECUCAO e o campo `data_inicio_execucao` e preenchido automaticamente.\n\nServicos so podem ser iniciados quando a OS esta em EXECUCAO; iniciar servico nao aprova orcamento nem altera o status da OS."
           }
         },
         {
@@ -638,7 +1598,10 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -646,8 +1609,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/6/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "6", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "6",
+                ""
+              ]
             },
             "description": "Retorna 400 se houver serviços não CONCLUIDO ou peças com quantidade_utilizada < quantidade.\n\nNota: ao usar POST /servicos/{id}/finalizar/ no último serviço da OS, a transição ocorre automaticamente."
           }
@@ -657,7 +1628,10 @@
           "request": {
             "method": "PATCH",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -665,8 +1639,16 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/6/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "6", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "6",
+                ""
+              ]
             }
           }
         },
@@ -676,20 +1658,38 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/99/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "99", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "99",
+                ""
+              ]
             }
           }
         },
         {
           "name": "Consulta Cliente por Placa (público)",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/consulta-cliente/?identificador=JKL4M56",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "consulta-cliente", ""],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "consulta-cliente",
+                ""
+              ],
               "query": [
                 {
                   "key": "identificador",
@@ -704,12 +1704,22 @@
         {
           "name": "Consulta Cliente por CPF (público)",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/consulta-cliente/?identificador=37065727040",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "consulta-cliente", ""],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "consulta-cliente",
+                ""
+              ],
               "query": [
                 {
                   "key": "identificador",
@@ -724,12 +1734,22 @@
         {
           "name": "ERRO - Consulta sem identificador",
           "request": {
-            "auth": { "type": "noauth" },
+            "auth": {
+              "type": "noauth"
+            },
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/consulta-cliente/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "consulta-cliente", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "consulta-cliente",
+                ""
+              ]
             },
             "description": "Deve retornar 400 — identificador é obrigatório."
           }
@@ -741,91 +1761,245 @@
               "name": "Iniciar Diagnóstico",
               "request": {
                 "method": "POST",
-                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
                 "url": {
                   "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/iniciar-diagnostico/",
-                  "host": ["{{base_url}}"],
-                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "iniciar-diagnostico", ""]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "{{os_id}}",
+                    "iniciar-diagnostico",
+                    ""
+                  ]
                 },
-                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
               }
             },
             {
               "name": "Finalizar Diagnóstico",
               "request": {
                 "method": "POST",
-                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
                 "url": {
                   "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/finalizar-diagnostico/",
-                  "host": ["{{base_url}}"],
-                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "finalizar-diagnostico", ""]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "{{os_id}}",
+                    "finalizar-diagnostico",
+                    ""
+                  ]
                 },
-                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
               }
             },
             {
               "name": "Aprovar Orçamento",
               "request": {
                 "method": "POST",
-                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
                 "url": {
                   "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/aprovar-orcamento/",
-                  "host": ["{{base_url}}"],
-                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "aprovar-orcamento", ""]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "{{os_id}}",
+                    "aprovar-orcamento",
+                    ""
+                  ]
                 },
-                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
               }
             },
             {
               "name": "Recusar Orçamento",
               "request": {
                 "method": "POST",
-                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
                 "url": {
                   "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/recusar-orcamento/",
-                  "host": ["{{base_url}}"],
-                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "recusar-orcamento", ""]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "{{os_id}}",
+                    "recusar-orcamento",
+                    ""
+                  ]
                 },
-                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
               }
             },
             {
               "name": "Finalizar OS",
               "request": {
                 "method": "POST",
-                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
                 "url": {
                   "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/finalizar/",
-                  "host": ["{{base_url}}"],
-                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "finalizar", ""]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "{{os_id}}",
+                    "finalizar",
+                    ""
+                  ]
                 },
-                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
               }
             },
             {
               "name": "Entregar Veículo",
               "request": {
                 "method": "POST",
-                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
                 "url": {
                   "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/entregar/",
-                  "host": ["{{base_url}}"],
-                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "entregar", ""]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "{{os_id}}",
+                    "entregar",
+                    ""
+                  ]
                 },
-                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
               }
             },
             {
               "name": "Cancelar OS",
               "request": {
                 "method": "POST",
-                "header": [{"key": "Authorization", "value": "Bearer {{access_token}}"}],
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
                 "url": {
                   "raw": "{{base_url}}/api/v1/ordens-servico/{{os_id}}/cancelar/",
-                  "host": ["{{base_url}}"],
-                  "path": ["api", "v1", "ordens-servico", "{{os_id}}", "cancelar", ""]
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "ordens-servico",
+                    "{{os_id}}",
+                    "cancelar",
+                    ""
+                  ]
                 },
-                "body": {"mode": "raw", "raw": "", "options": {"raw": {"language": "json"}}}
+                "body": {
+                  "mode": "raw",
+                  "raw": "",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
               }
             }
           ]
@@ -842,8 +2016,15 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/itens-pecas/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "itens-pecas", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "itens-pecas",
+                ""
+              ]
             }
           }
         },
@@ -853,8 +2034,16 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/itens-pecas/6/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "itens-pecas", "6", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "itens-pecas",
+                "6",
+                ""
+              ]
             },
             "description": "Retorna o item com `total_item` calculado (peca.valor_unitario × quantidade)."
           }
@@ -864,7 +2053,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -872,8 +2064,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/itens-pecas/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "itens-pecas", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "itens-pecas",
+                ""
+              ]
             },
             "description": "Adiciona 2x Filtro de Ar (R$ 35,00 each) à OS 8. Efeitos automáticos:\n- Estoque do Filtro de Ar decrementado em 2\n- valor_total da OS 8 recalculado"
           }
@@ -883,7 +2082,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -891,8 +2093,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/itens-pecas/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "itens-pecas", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "itens-pecas",
+                ""
+              ]
             },
             "description": "Adiciona Vela de Ignição (R$ 95,00) à OS 12 da Transportes Brasil."
           }
@@ -902,7 +2111,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -910,8 +2122,15 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/itens-pecas/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "itens-pecas", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "itens-pecas",
+                ""
+              ]
             },
             "description": "Amortecedor tem estoque 6. Pedir 999 deve retornar erro de estoque insuficiente."
           }
@@ -922,8 +2141,16 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/api/v1/itens-pecas/9/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "itens-pecas", "9", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "itens-pecas",
+                "9",
+                ""
+              ]
             },
             "description": "Remove o Filtro de Ar da OS 11."
           }
@@ -932,7 +2159,7 @@
     },
     {
       "name": "Serviços por OS",
-      "description": "Ciclo de vida de um serviço dentro de uma OS.\n\nFluxo completo:\n1. Adicionar serviço → POST /ordens-servico/{os_pk}/servicos/\n2. Iniciar execução (com ou sem peças) → POST /ordens-servico/{os_pk}/servicos/{id}/iniciar/\n3. Finalizar serviço → POST /ordens-servico/{os_pk}/servicos/{id}/finalizar/\n4. Ao finalizar o último serviço, a OS transita automaticamente para FINALIZADA\n\nTodos os endpoints são escopados pela OS — retornam 404 se a OS não pertencer ao usuário autenticado.",
+      "description": "Ciclo de vida de um servico dentro de uma OS.\n\nFluxo completo:\n1. Adicionar servico → POST /ordens-servico/{os_pk}/servicos/\n2. Aprovar o orcamento para a OS mudar de AGUARDANDO para EXECUCAO\n3. Iniciar execucao (com ou sem pecas) → POST /ordens-servico/{os_pk}/servicos/{id}/iniciar/\n4. Finalizar servico → POST /ordens-servico/{os_pk}/servicos/{id}/finalizar/\n5. Ao finalizar o ultimo servico, a OS transita automaticamente para FINALIZADA se todos os servicos estiverem concluidos e todas as pecas reservadas tiverem sido utilizadas\n\nServicos so podem ser iniciados quando a OS esta em EXECUCAO. Todos os endpoints sao escopados pela OS e retornam 404 se a OS nao pertencer ao usuario autenticado.",
       "item": [
         {
           "name": "Listar Serviços da OS 8",
@@ -940,10 +2167,19 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "8", "servicos", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "8",
+                "servicos",
+                ""
+              ]
             },
-            "description": "Lista os ItemServicoOS da OS 8 (AGUARDANDO). Mostra pk=5 (Revisão, PENDENTE) e pk=6 (Pastilha, PENDENTE)."
+            "description": "Lista os ItemServicoOS da OS 8. Se a OS ainda estiver AGUARDANDO, aprove o orcamento antes de chamar /iniciar/, pois servicos so podem iniciar quando a OS esta em EXECUCAO."
           }
         },
         {
@@ -952,8 +2188,18 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/5/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "8", "servicos", "5", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "8",
+                "servicos",
+                "5",
+                ""
+              ]
             },
             "description": "Detalhe do ItemServicoOS pk=5 (Revisão Completa, PENDENTE) na OS 8."
           }
@@ -963,7 +2209,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -971,8 +2220,17 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/6/servicos/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "6", "servicos", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "6",
+                "servicos",
+                ""
+              ]
             },
             "description": "Adiciona o serviço Troca de Óleo (pk=1) à OS 6 (RECEBIDA, João Silva). Retorna o ItemServicoOS com status PENDENTE."
           }
@@ -982,7 +2240,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -990,10 +2251,21 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/5/iniciar/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "8", "servicos", "5", "iniciar", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "8",
+                "servicos",
+                "5",
+                "iniciar",
+                ""
+              ]
             },
-            "description": "Inicia o serviço Revisão Completa (ItemServicoOS pk=5) na OS 8.\n- Status muda de PENDENTE → EM_EXECUCAO\n- data_inicio preenchida com agora\n- Como é o primeiro serviço iniciado na OS, ela transita de AGUARDANDO → EXECUCAO"
+            "description": "Inicia o servico Revisao Completa (ItemServicoOS pk=5) na OS informada, desde que a OS ja esteja em EXECUCAO apos aprovacao do orcamento.\n- Status do servico muda de PENDENTE → EM_EXECUCAO\n- data_inicio preenchida com agora\n- Iniciar servico nao aprova orcamento nem altera o status da OS"
           }
         },
         {
@@ -1001,7 +2273,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1009,8 +2284,19 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/6/iniciar/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "8", "servicos", "6", "iniciar", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "8",
+                "servicos",
+                "6",
+                "iniciar",
+                ""
+              ]
             },
             "description": "Inicia o serviço Troca de Pastilha (ItemServicoOS pk=6) na OS 8 com data personalizada e consumo de 2x Pastilha de Freio Dianteira (item_peca_os pk=10, qty disponível=2).\n- Cria ConsumoItemServico vinculando as peças ao serviço\n- Atualiza ItemPecaOS.quantidade_utilizada += 2\n- Valida que a peça pertence à OS e que há quantidade disponível"
           }
@@ -1020,7 +2306,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1028,8 +2317,19 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/9/servicos/7/finalizar/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "9", "servicos", "7", "finalizar", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "9",
+                "servicos",
+                "7",
+                "finalizar",
+                ""
+              ]
             },
             "description": "Finaliza o serviço Alinhamento e Balanceamento (ItemServicoOS pk=7, EM_EXECUCAO) na OS 9.\n- OS 9 tem apenas este serviço ativo → verificação de peças é executada\n- ItemPecaOS pk=6 (Pastilha×2) tem quantidade_utilizada=2 = quantidade → OK\n- Status muda para CONCLUIDO\n- OS 9 transita automaticamente para FINALIZADA"
           }
@@ -1040,8 +2340,18 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/6/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "8", "servicos", "6", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "8",
+                "servicos",
+                "6",
+                ""
+              ]
             },
             "description": "Remove o ItemServicoOS pk=6 (Pastilha, PENDENTE) da OS 8. Só é permitido remover serviços com status PENDENTE."
           }
@@ -1051,7 +2361,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1059,8 +2372,19 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/9/servicos/7/iniciar/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "9", "servicos", "7", "iniciar", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "9",
+                "servicos",
+                "7",
+                "iniciar",
+                ""
+              ]
             },
             "description": "ItemServicoOS pk=7 já está EM_EXECUCAO → deve retornar 400 'Serviço já foi iniciado ou concluído'."
           }
@@ -1070,7 +2394,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1078,8 +2405,19 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/5/iniciar/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "8", "servicos", "5", "iniciar", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "8",
+                "servicos",
+                "5",
+                "iniciar",
+                ""
+              ]
             },
             "description": "ItemPecaOS pk=10 tem quantidade=2, quantidade_utilizada=0 → disponível=2. Solicitar 99 deve retornar 400 'Quantidade indisponível'."
           }
@@ -1089,7 +2427,10 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1097,8 +2438,19 @@
             },
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/8/servicos/5/finalizar/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "8", "servicos", "5", "finalizar", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "8",
+                "servicos",
+                "5",
+                "finalizar",
+                ""
+              ]
             },
             "description": "ItemServicoOS pk=5 ainda está PENDENTE → deve retornar 400 'Serviço não está em execução'.\n\nSe o serviço estivesse EM_EXECUCAO mas a OS tivesse peças com quantidade_utilizada < quantidade, retornaria 400 'Existem peças não utilizadas na OS'."
           }
@@ -1109,8 +2461,18 @@
             "method": "DELETE",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/9/servicos/7/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "9", "servicos", "7", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "9",
+                "servicos",
+                "7",
+                ""
+              ]
             },
             "description": "ItemServicoOS pk=7 está EM_EXECUCAO → deve retornar 400 'Não é possível remover serviço em execução ou concluído'."
           }
@@ -1127,8 +2489,17 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/10/metricas/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "10", "metricas", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "10",
+                "metricas",
+                ""
+              ]
             },
             "description": "OS 10 (FINALIZADA, Pedro Oliveira). Retorna o serviço Troca de Correia Dentada (CONCLUIDO, ~32h de execução) com as peças consumidas: 1x Correia Dentada e 4x Óleo 5W30."
           }
@@ -1139,8 +2510,17 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/10/metricas/?servico=8",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "10", "metricas", ""],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "10",
+                "metricas",
+                ""
+              ],
               "query": [
                 {
                   "key": "servico",
@@ -1158,8 +2538,17 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/11/metricas/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "11", "metricas", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "11",
+                "metricas",
+                ""
+              ]
             },
             "description": "OS 11 (ENTREGUE, Ana Costa). Dois serviços CONCLUIDO: Troca de Pneu (~26h) e Higienização de Ar-Condicionado (~27h). O serviço de Higienização consumiu 1x Filtro de Ar."
           }
@@ -1170,8 +2559,17 @@
             "method": "GET",
             "url": {
               "raw": "{{base_url}}/api/v1/ordens-servico/9/metricas/",
-              "host": ["{{base_url}}"],
-              "path": ["api", "v1", "ordens-servico", "9", "metricas", ""]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "9",
+                "metricas",
+                ""
+              ]
             },
             "description": "OS 9 (EXECUCAO). O serviço Alinhamento está EM_EXECUCAO → `tempo_execucao_minutos` retorna null. Peças consumidas: 2x Pastilha de Freio Dianteira."
           }

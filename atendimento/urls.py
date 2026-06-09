@@ -11,6 +11,7 @@ router.register(r'servicos', views.ServicoViewSet)
 router.register(r'pecas', views.PecaViewSet)
 
 urlpatterns = [
+    path('', include('atendimento.interfaces.api.urls')),
     path('', include(router.urls)),
     path(
         'ordens-servico/<int:os_pk>/servicos/',

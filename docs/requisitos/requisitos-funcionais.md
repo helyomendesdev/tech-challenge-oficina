@@ -87,7 +87,7 @@ O sistema deve permitir avançar o status da OS seguindo o fluxo válido: `RECEB
 
 **Critérios de Aceitação:**
 - Transições inválidas devem ser rejeitadas
-- Avanço para `EXECUCAO` pode ser automático ao iniciar o primeiro serviço
+- Avanço para `EXECUCAO` ocorre após aprovação do orçamento
 - Avanço para `FINALIZADA` exige todos os serviços concluídos e peças consumidas
 
 ### RF010 — Cálculo Automático do Valor Total
@@ -119,7 +119,7 @@ O sistema deve permitir adicionar serviços do catálogo a uma OS. Cada serviço
 O sistema deve permitir iniciar e finalizar a execução de cada serviço individualmente, registrando data/hora de início e fim.
 
 **Critérios de Aceitação:**
-- Iniciar um serviço muda seu status para `EM_EXECUCAO`
+- Iniciar um serviço exige que a OS esteja em `EXECUCAO` e muda o serviço para `EM_EXECUCAO`
 - Finalizar um serviço muda seu status para `CONCLUIDO`
 - Tempo de execução deve ser calculado automaticamente
 - Um serviço só pode ser finalizado se estiver `EM_EXECUCAO`

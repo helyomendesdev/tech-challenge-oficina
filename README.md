@@ -7,8 +7,8 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 ![DRF](https://img.shields.io/badge/DRF-3.15-red?style=flat)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?style=flat&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)
-![Cobertura](https://img.shields.io/badge/Cobertura-88%25-brightgreen?style=flat)
-![Testes](https://img.shields.io/badge/Testes-105%20passando-brightgreen?style=flat)
+![Cobertura](https://img.shields.io/badge/Cobertura-94%25-brightgreen?style=flat)
+![Testes](https://img.shields.io/badge/Testes-194%20passando-brightgreen?style=flat)
 ![SonarQube](https://img.shields.io/badge/SonarQube-A%20Rating-brightgreen?style=flat&logo=sonarqube&logoColor=white)
 ![OWASP](https://img.shields.io/badge/OWASP%20Top%2010-Conformante-brightgreen?style=flat)
 
@@ -109,6 +109,43 @@ O sistema permite que uma oficina mecânica gerencie seu ciclo operacional compl
 │  + healthcheck (pg_isready) + condition: service_healthy          │
 └──────────────────────────────────────────────────────────────────┘
 ```
+
+### Fase 2 — Arquitetura híbrida pragmática
+
+Na Fase 2, o projeto evolui de um monolito Django tradicional para um
+**monolito modular Django com Clean Architecture/Arquitetura Hexagonal
+pragmática e DDD tático**. A proposta não é vender uma Clean Architecture pura:
+Django, DRF e o ORM continuam presentes como parte consciente da solução,
+enquanto os fluxos críticos novos passam a ter dependências mais bem separadas.
+
+As camadas adicionadas no app `atendimento` são:
+
+| Camada | Responsabilidade |
+|---|---|
+| `domain` | Regras puras de negócio: enums, policies, exceptions, value objects e services. |
+| `application` | Use cases, DTOs e ports que orquestram os fluxos principais sem depender de HTTP ou ORM. |
+| `infrastructure` | Adapters concretos: repositories com Django ORM, transações e notificações simuladas. |
+| `interfaces` | Adapters de entrada HTTP/DRF: serializers, views e urls dos endpoints novos. |
+
+O escopo desta refatoração é a camada de código da aplicação. Artefatos de
+Kubernetes, Terraform e esteiras CI/CD pertencem a outro escopo de infraestrutura
+e não foram alterados nesta etapa.
+
+Nessa organização, Django/DRF atua como **adapter de entrada**, os use cases
+concentram os fluxos de aplicação, os repositories isolam o acesso ao Django
+ORM e o domínio concentra as regras independentes de framework.
+
+`atendimento/models.py` foi preservado por compatibilidade com migrations,
+Django Admin, serializers antigos, endpoints da Fase 1 e testes existentes. Os
+fluxos críticos da Fase 2 foram migrados para use cases, DTOs, ports,
+repositories e APIViews finas. Algumas regras legadas permanecem
+temporariamente em `models.py`, `signals.py`, ModelSerializers antigos e
+ViewSets antigos; isso é uma decisão consciente de refatoração incremental para
+não quebrar contratos já validados.
+
+Próximos passos naturais são migrar actions antigas para use cases, reduzir
+signals, mover gradualmente cálculo e estoque para serviços/use cases, avaliar
+entities puras e mappers, e reorganizar ports caso o projeto cresça.
 
 ### Fluxo de uma Ordem de Serviço
 
@@ -295,6 +332,16 @@ Copie `.env.example` para `.env` e preencha os valores antes de iniciar a aplica
 | `DELETE` | `/api/v1/ordens-servico/{id}/` | Remover OS | Sim |
 | `GET` | `/api/v1/ordens-servico/consulta-cliente/` | Consultar OS por placa ou CPF/CNPJ | **Não** |
 
+#### Fase 2 — novos endpoints
+
+| Método | Endpoint | Descrição | Auth |
+|---|---|---|---|
+| `POST` | `/api/v1/ordens-servico/abrir/` | Abertura completa de OS via use case | Sim |
+| `GET` | `/api/v1/ordens-servico/{id}/status/` | Consulta de status da OS com isolamento por usuário | Sim |
+| `GET` | `/api/v1/ordens-servico/fila/` | Fila operacional: EXECUCAO, AGUARDANDO, DIAGNOSTICO e RECEBIDA | Sim |
+| `POST` | `/api/v1/orcamentos/notificacoes/` | Simula aprovação ou recusa externa de orçamento | Sim |
+| `POST` | `/api/v1/ordens-servico/status-notificacoes/` | Simula atualização externa de status validada por policies | Sim |
+
 #### Itens de Peças (OS)
 
 | Método | Endpoint | Descrição |
@@ -429,7 +476,7 @@ RECEBIDA → DIAGNOSTICO → AGUARDANDO ┬→ EXECUCAO → FINALIZADA → ENTRE
 | Peça **atualizada** em uma OS | Diferença de quantidade ajustada no estoque; `valor_total` recalculado |
 | Peça **removida** de uma OS | `estoque_atual` devolvido; `valor_total` recalculado |
 | Serviço adicionado/removido de uma OS | `valor_total` da OS recalculado |
-| **Serviço iniciado** (`/iniciar/`) | Status do serviço → `EM_EXECUCAO`; peças informadas são consumidas atomicamente; se for o primeiro serviço a iniciar em OS `AGUARDANDO`, a OS avança para `EXECUCAO` |
+| **Serviço iniciado** (`/iniciar/`) | Permitido somente quando a OS está em `EXECUCAO`; status do serviço → `EM_EXECUCAO`; peças informadas são consumidas atomicamente sem nova baixa de estoque |
 | **Serviço finalizado** (`/finalizar/`) | Status do serviço → `CONCLUIDO`; se for o último serviço ativo e todas as peças da OS foram consumidas, a OS avança automaticamente para `FINALIZADA` |
 
 ### Gates de finalização
@@ -506,8 +553,10 @@ pytest --cov=atendimento --cov-report=xml:coverage.xml
 
 | Métrica | Valor |
 |---|---|
-| Total de testes | **105 passando** |
-| Cobertura geral | **88 %** |
+| Total de testes | **194 passando** |
+| Subtests | **3 passando** |
+| Cobertura geral | **94 %** |
+| OpenAPI | **0 erros** · 2 warnings não bloqueantes de enum `status` |
 | SonarQube Bugs | **0** |
 | SonarQube Vulnerabilidades | **0** |
 | SonarQube Code Smells | **0** |
@@ -525,9 +574,10 @@ Os testes cobrem:
 - **Veículos:** Normalização de placa para maiúsculas
 - **Itens de Peças:** Estoque insuficiente em inserção e atualização
 - **Serviços por OS (CRUD):** Adicionar, listar, remover, isolamento por usuário
-- **Iniciar serviço:** Peças consumidas atomicamente, cascade OS AGUARDANDO → EXECUCAO, erros de disponibilidade e estado
+- **Iniciar serviço:** Peças consumidas atomicamente sem nova baixa de estoque, bloqueio quando a OS não está em EXECUCAO, erros de disponibilidade e estado
 - **Finalizar serviço:** Tempo calculado, cascade OS → FINALIZADA, gate de peças não utilizadas
 - **Métricas:** `tempo_execucao_minutos`, `pecas_consumidas`, filtro por serviço, isolamento por usuário
+- **Fase 2:** Abertura completa de OS, status, fila operacional, aprovação/recusa simulada, notificação de status e isolamento para usuário comum, staff e superuser
 
 > 📄 Relatório completo de qualidade e segurança: [docs/relatorio_qualidade_seguranca.md](docs/relatorio_qualidade_seguranca.md)
 
@@ -569,8 +619,14 @@ tech-challenge-fase-1-oficina/
 │   ├── urls.py                  # Roteamento da API
 │   ├── admin.py                 # Django Admin customizado
 │   ├── exceptions.py            # Handler de erros com formato estruturado
-│   ├── signals.py               # Signals post_save/post_delete para recálculo de totais
-│   ├── tests.py                 # 105 testes (modelo + API + filtros + execução de serviços + métricas + transições de status)
+│   ├── signals.py               # Signals legados limpos; estoque fica em ItemPecaOS
+│   ├── tests.py                 # Testes Fase 1: modelos, API, filtros, estoque, serviços e métricas
+│   ├── test_phase2_flows.py     # Testes Fase 2: use cases, endpoints novos, fila e notificações
+│   ├── test_domain.py           # Testes de value objects, policies e services de domínio
+│   ├── domain/                  # DDD tático: enums, policies, VOs, exceptions e services puros
+│   ├── application/             # DTOs, ports e use cases sem dependência de HTTP/ORM
+│   ├── infrastructure/          # Repositories Django ORM, transactions e notificação fake
+│   ├── interfaces/              # APIViews/serializers/urls dos endpoints novos
 │   ├── migrations/              # Histórico de schema do banco
 │   └── fixtures/
 │       ├── initial_data.json    # Dado base (1 cliente, 1 veículo...)
@@ -596,8 +652,9 @@ A aplicação passa por análise estática de segurança (SAST via **SonarQube C
 
 | Dimensão | Resultado |
 |---|---|
-| Cobertura de testes | **88 %** (meta ≥ 80 %) |
-| Testes passando | **105 / 105** |
+| Cobertura de testes | **94 %** (meta ≥ 80 %) |
+| Testes passando | **194 / 194 + 3 subtests** |
+| Schema OpenAPI | **0 erros** · 2 warnings não bloqueantes de enum `status` |
 | Bugs (SonarQube) | **0** — Rating A |
 | Vulnerabilidades (SonarQube) | **0** — Rating A |
 | Code Smells (SonarQube) | **0** — dívida técnica 0 min |

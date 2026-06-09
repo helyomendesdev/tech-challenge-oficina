@@ -99,8 +99,9 @@ PENDENTE → EM_EXECUCAO → CONCLUIDO
 - Efeitos:
   - Status do serviço → `EM_EXECUCAO`
   - `data_inicio` preenchida com timestamp atual (ou informado)
+  - A OS deve estar em `EXECUCAO`; a transição `AGUARDANDO` → `EXECUCAO` ocorre após aprovação do orçamento
   - Peças informadas são consumidas atomicamente (cria registros em `ConsumoItemServico`)
-  - Se for o primeiro serviço a iniciar em OS `AGUARDANDO`, a OS avança automaticamente para `EXECUCAO`
+  - Iniciar serviço não aprova orçamento automaticamente nem altera o status da OS
 
 ### 6.2 Transição para CONCLUIDO
 - Endpoint: `POST /api/v1/ordens-servico/{os_id}/servicos/{id}/finalizar/`
@@ -135,7 +136,7 @@ PENDENTE → EM_EXECUCAO → CONCLUIDO
 | Estados definidos como `CharField` com `choices` | Simplicidade, validação nativa do Django ORM, fácil manutenção |
 | Validação de transição no Serializer | Centraliza regras de negócio na camada de serialização, reutilizável por qualquer view |
 | Gates de finalização no Serializer | Garante consistência transacional independente do canal de entrada (API, admin, etc.) |
-| Cascade automático OS → EXECUCAO no primeiro serviço | Reduz passos manuais do mecânico; se há trabalho, a OS está em execução |
+| Aprovação do orçamento antes da execução | A OS muda de `AGUARDANDO` para `EXECUCAO` somente após aprovação do orçamento; serviços só podem iniciar quando a OS já está em execução |
 | Cascade automático OS → FINALIZADA no último serviço | Garante que a OS não fique pendente após todos os serviços concluídos |
 
 ---

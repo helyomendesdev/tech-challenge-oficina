@@ -9,6 +9,14 @@ from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 import logging
 
+from atendimento.domain.enums import StatusItemServico, StatusOrdemServico
+from atendimento.domain.exceptions import DomainError
+from atendimento.domain.policies import (
+    FinalizacaoOrdemServicoPolicy,
+    OrdemServicoStatusPolicy,
+)
+from atendimento.domain.services import OrcamentoDomainService
+
 # ---------------------------------------------------------------------------
 # Logger de auditoria de segurança (OWASP A09)
 # ---------------------------------------------------------------------------
@@ -99,19 +107,30 @@ class Peca(models.Model):
 
 
 class OrdemServico(models.Model):
+    """Modelo legado de OS mantido como ancora Django.
+
+    Algumas regras permanecem aqui temporariamente para preservar migrations,
+    admin, serializers antigos e endpoints da Fase 1 durante a refatoracao
+    incremental para use cases.
+    """
+
     STATUS_CHOICES = [
-        ('RECEBIDA', 'Recebida'),
-        ('DIAGNOSTICO', 'Em diagnóstico'),
-        ('AGUARDANDO', 'Aguardando aprovação'),
-        ('EXECUCAO', 'Em execução'),
-        ('FINALIZADA', 'Finalizada'),
-        ('ENTREGUE', 'Entregue'),
-        ('CANCELADA', 'Cancelada'),
+        (StatusOrdemServico.RECEBIDA.value, 'Recebida'),
+        (StatusOrdemServico.DIAGNOSTICO.value, 'Em diagnóstico'),
+        (StatusOrdemServico.AGUARDANDO.value, 'Aguardando aprovação'),
+        (StatusOrdemServico.EXECUCAO.value, 'Em execução'),
+        (StatusOrdemServico.FINALIZADA.value, 'Finalizada'),
+        (StatusOrdemServico.ENTREGUE.value, 'Entregue'),
+        (StatusOrdemServico.CANCELADA.value, 'Cancelada'),
     ]
 
     cliente = models.ForeignKey(Cliente, on_delete=models.PROTECT)
     veiculo = models.ForeignKey(Veiculo, on_delete=models.PROTECT)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='RECEBIDA')
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=StatusOrdemServico.RECEBIDA.value,
+    )
     servicos = models.ManyToManyField(Servico, through='ItemServicoOS', blank=True)
     data_abertura = models.DateTimeField(auto_now_add=True)
     data_inicio_execucao = models.DateTimeField(null=True, blank=True)
@@ -124,16 +143,33 @@ class OrdemServico(models.Model):
 
     def calcular_total(self):
         """Recalcula e persiste o valor_total da OS de forma segura (sem recursão)."""
-        total_servicos = sum(s.valor_mao_de_obra for s in self.servicos.all())
-        total_pecas = sum(item.total_item for item in self.itens_pecas.all())
-        novo_total = total_servicos + total_pecas
+        # Recalculo mantido no model para compatibilidade com signals e
+        # endpoints antigos enquanto os fluxos legados ainda existem.
+        # TODO: migrar recalculo de total para use cases/repositories quando
+        # todos os fluxos de escrita de OS estiverem fora dos models legados.
+        if not self.pk:
+            return
+
+        novo_total = OrcamentoDomainService.calcular_total(
+            servicos=self.servicos.all(),
+            pecas=self.itens_pecas.select_related("peca").all(),
+        ).valor
         OrdemServico.objects.filter(pk=self.pk).update(valor_total=novo_total)
+        self.valor_total = novo_total
 
     def save(self, *args, **kwargs):
-        if self.status == 'EXECUCAO' and not self.data_inicio_execucao:
+        # TODO: mover preenchimento automatico de datas de status para use
+        # cases. Mantido aqui por compatibilidade com endpoints legados.
+        if (
+            self.status == StatusOrdemServico.EXECUCAO.value
+            and not self.data_inicio_execucao
+        ):
             self.data_inicio_execucao = timezone.now()
 
-        if self.status == 'FINALIZADA' and not self.data_finalizacao:
+        if (
+            self.status == StatusOrdemServico.FINALIZADA.value
+            and not self.data_finalizacao
+        ):
             self.data_finalizacao = timezone.now()
 
         super().save(*args, **kwargs)
@@ -143,41 +179,55 @@ class OrdemServico(models.Model):
         return f"OS {self.id} - {self.status}"
 
     def _transicionar(self, status_esperado, novo_status, mensagem_erro):
+        """Transicao legada validada pela policy de dominio."""
         if self.status != status_esperado:
+            raise ValidationError(mensagem_erro)
+        try:
+            OrdemServicoStatusPolicy.validar_transicao(self.status, novo_status)
+        except DomainError:
             raise ValidationError(mensagem_erro)
         self.status = novo_status
         self.save()
 
     def iniciar_diagnostico(self):
         self._transicionar(
-            'RECEBIDA', 'DIAGNOSTICO',
+            StatusOrdemServico.RECEBIDA.value,
+            StatusOrdemServico.DIAGNOSTICO.value,
             "A OS precisa estar com status RECEBIDA para iniciar o diagnóstico."
         )
 
     def finalizar_diagnostico(self):
         self._transicionar(
-            'DIAGNOSTICO', 'AGUARDANDO',
+            StatusOrdemServico.DIAGNOSTICO.value,
+            StatusOrdemServico.AGUARDANDO.value,
             "A OS precisa estar em DIAGNOSTICO para finalizar o diagnóstico."
         )
 
     def aprovar_orcamento(self):
         self._transicionar(
-            'AGUARDANDO', 'EXECUCAO',
+            StatusOrdemServico.AGUARDANDO.value,
+            StatusOrdemServico.EXECUCAO.value,
             "A OS precisa estar AGUARDANDO aprovação para aprovar o orçamento."
         )
 
     def recusar_orcamento(self):
         self._transicionar(
-            'AGUARDANDO', 'DIAGNOSTICO',
+            StatusOrdemServico.AGUARDANDO.value,
+            StatusOrdemServico.DIAGNOSTICO.value,
             "A OS precisa estar AGUARDANDO aprovação para recusar o orçamento."
         )
 
     def finalizar(self):
-        if self.status != 'EXECUCAO':
+        """Finalizacao legada validada pelas policies de dominio."""
+        # TODO: remover validacoes abaixo quando as actions legadas de OS
+        # forem totalmente migradas para use cases.
+        if self.status != StatusOrdemServico.EXECUCAO.value:
             raise ValidationError(
                 "A OS precisa estar em EXECUCAO para ser finalizada."
             )
-        tem_servico_nao_concluido = self.itens_servico.exclude(status='CONCLUIDO').exists()
+        tem_servico_nao_concluido = self.itens_servico.exclude(
+            status=StatusItemServico.CONCLUIDO.value
+        ).exists()
         if tem_servico_nao_concluido:
             raise ValidationError(
                 "Não é possível finalizar a OS: existem serviços não concluídos."
@@ -189,23 +239,49 @@ class OrdemServico(models.Model):
             raise ValidationError(
                 "Não é possível finalizar a OS: existem peças não utilizadas."
             )
-        self.status = 'FINALIZADA'
+        try:
+            FinalizacaoOrdemServicoPolicy.validar_finalizacao(
+                self.status,
+                self.itens_servico.all(),
+                self.itens_pecas.all(),
+            )
+            OrdemServicoStatusPolicy.validar_transicao(
+                self.status,
+                StatusOrdemServico.FINALIZADA.value,
+            )
+        except DomainError as exc:
+            raise ValidationError(str(exc))
+
+        self.status = StatusOrdemServico.FINALIZADA.value
         self.save()
 
     def entregar(self):
         self._transicionar(
-            'FINALIZADA', 'ENTREGUE',
+            StatusOrdemServico.FINALIZADA.value, StatusOrdemServico.ENTREGUE.value,
             "A OS precisa estar FINALIZADA para ser entregue."
         )
 
     def cancelar(self):
         self._transicionar(
-            'AGUARDANDO', 'CANCELADA',
+            StatusOrdemServico.AGUARDANDO.value, StatusOrdemServico.CANCELADA.value,
             "A OS precisa estar AGUARDANDO aprovação para ser cancelada."
         )
 
 
+def recalcular_total_ordem_servico(ordem_servico_id):
+    """Recalcula o total a partir de uma instancia fresca da OS."""
+    ordem_servico = OrdemServico.objects.filter(pk=ordem_servico_id).first()
+    if ordem_servico:
+        ordem_servico.calcular_total()
+
+
 class ItemPecaOS(models.Model):
+    """Item de peca da OS com reserva legada de estoque.
+
+    A movimentacao no save/delete e temporaria, mas segue como fonte da
+    verdade para compatibilidade com endpoints antigos.
+    """
+
     os = models.ForeignKey(OrdemServico, related_name='itens_pecas', on_delete=models.CASCADE)
     peca = models.ForeignKey(Peca, on_delete=models.PROTECT)
     quantidade = models.PositiveIntegerField(default=1)
@@ -220,8 +296,30 @@ class ItemPecaOS(models.Model):
         return self.peca.valor_unitario * self.quantidade
 
     def save(self, *args, **kwargs):
+        # TODO: migrar movimentacao de estoque totalmente para use cases e
+        # repositories. Mantido aqui temporariamente por compatibilidade com
+        # endpoints legados que ainda persistem ItemPecaOS diretamente.
+        if self.quantidade_utilizada > self.quantidade:
+            raise ValidationError(
+                "Quantidade utilizada nao pode ser maior que a quantidade reservada."
+            )
+
         if self.pk:
             item_original = ItemPecaOS.objects.get(pk=self.pk)
+            if self.peca_id != item_original.peca_id:
+                if self.peca.estoque_atual < self.quantidade:
+                    raise ValidationError(
+                        f"Estoque insuficiente para a peca '{self.peca.nome}'. "
+                        f"Disponivel: {self.peca.estoque_atual}, Solicitado: {self.quantidade}"
+                    )
+                item_original.peca.estoque_atual += item_original.quantidade
+                item_original.peca.save()
+                self.peca.estoque_atual -= self.quantidade
+                self.peca.save()
+                super().save(*args, **kwargs)
+                recalcular_total_ordem_servico(self.os_id)
+                return
+
             diferenca = self.quantidade - item_original.quantidade
             if diferenca != 0:
                 if self.peca.estoque_atual < diferenca:
@@ -241,13 +339,15 @@ class ItemPecaOS(models.Model):
             self.peca.save()
 
         super().save(*args, **kwargs)
-        self.os.calcular_total()
+        recalcular_total_ordem_servico(self.os_id)
 
     def delete(self, *args, **kwargs):
+        # Devolve a reserva ao estoque no caminho legado de remocao de peca.
+        ordem_servico_id = self.os_id
         self.peca.estoque_atual += self.quantidade
         self.peca.save()
         super().delete(*args, **kwargs)
-        self.os.calcular_total()
+        recalcular_total_ordem_servico(ordem_servico_id)
 
     def __str__(self):
         return f"{self.quantidade}x {self.peca.nome} (OS {self.os_id})"
@@ -255,9 +355,9 @@ class ItemPecaOS(models.Model):
 
 class ItemServicoOS(models.Model):
     STATUS_CHOICES = [
-        ('PENDENTE', 'Pendente'),
-        ('EM_EXECUCAO', 'Em Execução'),
-        ('CONCLUIDO', 'Concluído'),
+        (StatusItemServico.PENDENTE.value, 'Pendente'),
+        (StatusItemServico.EM_EXECUCAO.value, 'Em Execução'),
+        (StatusItemServico.CONCLUIDO.value, 'Concluído'),
     ]
     ordem_servico = models.ForeignKey(
         OrdemServico, on_delete=models.CASCADE, related_name='itens_servico'
@@ -265,7 +365,11 @@ class ItemServicoOS(models.Model):
     servico = models.ForeignKey(
         Servico, on_delete=models.PROTECT, related_name='itens_servico'
     )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDENTE')
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=StatusItemServico.PENDENTE.value,
+    )
     data_inicio = models.DateTimeField(null=True, blank=True)
     data_finalizacao = models.DateTimeField(null=True, blank=True)
     created_by = models.ForeignKey(
@@ -309,12 +413,16 @@ class ConsumoItemServico(models.Model):
 
 @receiver(post_save, sender=ItemServicoOS)
 def atualizar_total_os_item_servico(sender, instance, **kwargs):
-    instance.ordem_servico.calcular_total()
+    # TODO: manter signal apenas enquanto endpoints legados ainda criam
+    # ItemServicoOS diretamente via ModelSerializer.
+    recalcular_total_ordem_servico(instance.ordem_servico_id)
 
 
 @receiver(post_delete, sender=ItemServicoOS)
 def atualizar_total_os_item_servico_delete(sender, instance, **kwargs):
-    instance.ordem_servico.calcular_total()
+    # TODO: manter signal apenas enquanto endpoints legados ainda removem
+    # ItemServicoOS diretamente via ViewSet.
+    recalcular_total_ordem_servico(instance.ordem_servico_id)
 
 
 # ---------------------------------------------------------------------------
