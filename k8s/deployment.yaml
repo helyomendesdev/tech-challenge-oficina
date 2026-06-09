@@ -22,7 +22,8 @@ spec:
     spec:
       containers:
       - name: app
-        image: helyomendesdev/tech-challenge-oficina:latest
+        image: oficina-app:latest
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
         envFrom:
@@ -38,21 +39,18 @@ spec:
             cpu: "500m"
             memory: "512Mi"
         livenessProbe:
-          httpGet:
-            path: /
+          tcpSocket:
             port: 8000
-          initialDelaySeconds: 15
+          initialDelaySeconds: 10
           periodSeconds: 20
         readinessProbe:
-          httpGet:
-            path: /
+          tcpSocket:
             port: 8000
           initialDelaySeconds: 5
           periodSeconds: 10
         startupProbe:
-          httpGet:
-            path: /
+          tcpSocket:
             port: 8000
           initialDelaySeconds: 3
-          periodSeconds: 5
-          failureThreshold: 30
+          periodSeconds: 10
+          failureThreshold: 20
