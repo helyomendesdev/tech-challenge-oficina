@@ -256,10 +256,10 @@ ContainerDb(db, "PostgreSQL", "Banco de Dados")
 Rel(mecanico, view, "POST /ordens-servico/{id}/servicos/{id}/iniciar/")
 Rel(view, service_serializer, "Valida payload (data_inicio, pecas)")
 Rel(view, model, "Busca ItemServicoOS")
-Rel(model, os_model, "Verifica status da OS")
+Rel(model, os_model, "Valida OS em EXECUCAO")
 Rel(model, db, "Atualiza status → EM_EXECUCAO, data_inicio")
 Rel(model, db, "Cria ConsumoItemServico (peças consumidas)")
-Rel(db, os_model, "Atualiza OS → EXECUCAO (se primeiro serviço)")
+Rel(db, os_model, "Mantém OS em EXECUCAO; iniciar serviço não altera status da OS")
 Rel(os_model, signal, "Dispara signal post_save")
 Rel(signal, db, "Registra log de auditoria")
 Rel(view, mecanico, "Retorna 200 OK com dados atualizados")
@@ -288,9 +288,9 @@ sequenceDiagram
     View->>ItemModel: Busca por ID
     ItemModel-->>View: instância
 
-    alt Status != PENDENTE
-        View-->>Mecanico: HTTP 400: Serviço não está pendente
-    else Status == PENDENTE
+    alt OS != EXECUCAO ou Status != PENDENTE
+        View-->>Mecanico: HTTP 400: OS precisa estar em EXECUCAO e serviço deve estar PENDENTE
+    else OS == EXECUCAO e Status == PENDENTE
         View->>ItemModel: Atualiza status=EM_EXECUCAO, data_inicio
         ItemModel->>DB: UPDATE item_servico_os
 
@@ -301,10 +301,7 @@ sequenceDiagram
             Consumo->>DB: UPDATE item_peca_os SET quantidade_utilizada += qtd
         end
 
-        View->>OSModel: Verifica se é primeiro serviço a iniciar
-        alt OS estava AGUARDANDO
-            OSModel->>DB: UPDATE ordem_servico SET status=EXECUCAO
-        end
+        View->>OSModel: Mantém OS em EXECUCAO; iniciar serviço não altera status da OS
 
         DB->>Signals: Dispara post_save
         Signals->>DB: Registra logs de auditoria (security)

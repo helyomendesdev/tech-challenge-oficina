@@ -25,7 +25,7 @@ Adotar uma **arquitetura monolítica modular** para a Fase 1, com a possibilidad
 |---|---|
 | **Time-to-market** | Monolito permite entrega rápida com um único deploy |
 | **Complexidade** | Menor overhead operacional (um banco, uma aplicação, um container) |
-| **Transações** | Operações como "iniciar serviço + consumir peças + atualizar OS" são atomicamente simples em um único banco |
+| **Transações** | Operações como "validar OS em execução + iniciar serviço + consumir peças" são atomicamente simples em um único banco |
 | **Testes** | Testes de integração são mais fáceis de executar localmente |
 | **Evolução** | Django apps (`atendimento/`) permitem modularização interna que facilita futura extração |
 

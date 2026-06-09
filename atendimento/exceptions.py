@@ -1,7 +1,77 @@
-from rest_framework.views import exception_handler
-from rest_framework.response import Response
-from rest_framework import status
+import logging
+
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework import status
+from rest_framework.response import Response
+from rest_framework.views import exception_handler
+
+from atendimento.domain.exceptions import (
+    DomainError,
+    EstoqueInsuficienteError,
+    OrcamentoNaoPodeSerProcessadoError,
+    OrdemServicoNaoEncontradaError,
+    RegraFinalizacaoOrdemServicoError,
+    TransicaoStatusInvalidaError,
+)
+
+
+logger = logging.getLogger(__name__)
+MENSAGEM_ERRO_VALIDACAO = 'Erro de validação. Verifique os campos informados.'
+
+DOMAIN_ERROR_STATUS_MAP = {
+    OrdemServicoNaoEncontradaError: status.HTTP_404_NOT_FOUND,
+    TransicaoStatusInvalidaError: status.HTTP_400_BAD_REQUEST,
+    EstoqueInsuficienteError: status.HTTP_400_BAD_REQUEST,
+    RegraFinalizacaoOrdemServicoError: status.HTTP_400_BAD_REQUEST,
+    OrcamentoNaoPodeSerProcessadoError: status.HTTP_400_BAD_REQUEST,
+    DomainError: status.HTTP_400_BAD_REQUEST,
+}
+
+
+def resposta_erro(mensagem, status_code=status.HTTP_400_BAD_REQUEST, campos=None):
+    """Monta o formato padrao de erro usado pela API."""
+    body = {
+        'erro': True,
+        'status_code': status_code,
+        'mensagem': mensagem,
+    }
+    if campos is not None:
+        body['campos'] = campos
+    return body
+
+
+def status_code_domain_error(exc):
+    """Mapeia exceptions de dominio para HTTP sem depender de DRF nas camadas."""
+    return next(
+        (
+            http_status
+            for error_class, http_status in DOMAIN_ERROR_STATUS_MAP.items()
+            if isinstance(exc, error_class)
+        ),
+        status.HTTP_400_BAD_REQUEST,
+    )
+
+
+def response_from_domain_error(exc):
+    """Converte DomainError em Response padronizada."""
+    status_code = status_code_domain_error(exc)
+    return Response(
+        resposta_erro(str(exc), status_code),
+        status=status_code,
+    )
+
+
+def _formatar_django_validation_error(exc):
+    """Converte ValidationError do Django em mensagem/campos de erro."""
+    if hasattr(exc, 'message_dict'):
+        return (
+            MENSAGEM_ERRO_VALIDACAO,
+            _formatar_dict(exc.message_dict),
+        )
+    if hasattr(exc, 'messages'):
+        return _formatar_lista(exc.messages), None
+    return str(exc), None
 
 
 def _formatar_string(data):
@@ -68,30 +138,38 @@ def custom_exception_handler(exc, context):
         "campos": { ... }                ← erros por campo (400 de validação)
       }
     """
+    if isinstance(exc, DomainError):
+        return response_from_domain_error(exc)
+
+    if isinstance(exc, DjangoValidationError):
+        mensagem, campos = _formatar_django_validation_error(exc)
+        return Response(
+            resposta_erro(mensagem, status.HTTP_400_BAD_REQUEST, campos),
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     response = exception_handler(exc, context)
 
     if response is not None:
         erros_formatados = _formatar_erros(response.data)
 
-        body = {
-            'erro': True,
-            'status_code': response.status_code,
-        }
-
         if isinstance(erros_formatados, dict):
-            body['mensagem'] = 'Erro de validação. Verifique os campos informados.'
-            body['campos'] = erros_formatados
+            body = resposta_erro(
+                MENSAGEM_ERRO_VALIDACAO,
+                response.status_code,
+                erros_formatados,
+            )
         else:
-            body['mensagem'] = erros_formatados
+            body = resposta_erro(erros_formatados, response.status_code)
 
         response.data = body
 
     else:
-        body = {
-            'erro': True,
-            'status_code': 500,
-            'mensagem': 'Erro interno no servidor da oficina. Contate o suporte.',
-        }
+        logger.exception("Erro nao tratado na API")
+        body = resposta_erro(
+            'Erro interno no servidor da oficina. Contate o suporte.',
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
         if settings.DEBUG:
             body['detalhes'] = str(exc)
 

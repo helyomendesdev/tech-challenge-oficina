@@ -30,7 +30,9 @@ atendimento/
 ├── models.py             # Entidades de domínio + validadores
 ├── serializers.py        # Serializers + máquina de estados
 ├── signals.py            # Signals Django (recálculo + auditoria)
-├── tests.py              # 76 testes (modelo + API)
+├── tests.py              # Testes Fase 1 (modelo + API + fluxos críticos)
+├── test_phase2_flows.py  # Testes Fase 2 (use cases + endpoints novos)
+├── test_domain.py        # Testes de domínio (VOs, policies e services)
 ├── throttles.py          # Rate limiting customizado
 ├── urls.py               # Roteamento da API (DefaultRouter)
 ├── views.py              # ViewSets (controllers)
@@ -74,9 +76,9 @@ Rel(action_ser, view, "Retorna dados validados")
 Rel(view, item_model, "Busca ItemServicoOS por ID")
 Rel(item_model, view, "Retorna instância")
 
-alt Status != PENDENTE
-    Rel(view, cliente, "HTTP 400: Serviço não está pendente")
-else Status == PENDENTE
+alt OS != EXECUCAO ou Status != PENDENTE
+    Rel(view, cliente, "HTTP 400: OS precisa estar em EXECUCAO e serviço deve estar PENDENTE")
+else OS == EXECUCAO e Status == PENDENTE
     Rel(view, item_model, "Atualiza status=EM_EXECUCAO, data_inicio")
     Rel(item_model, db, "UPDATE item_servico_os")
 
@@ -87,10 +89,7 @@ else Status == PENDENTE
         Rel(consumo_model, db, "UPDATE item_peca_os SET quantidade_utilizada += qtd")
     end
 
-    Rel(view, os_model, "Verifica se é primeiro serviço a iniciar")
-    alt OS estava AGUARDANDO
-        Rel(os_model, db, "UPDATE ordem_servico SET status=EXECUCAO")
-    end
+    Rel(view, os_model, "Mantém OS em EXECUCAO; iniciar serviço não altera status da OS")
 
     Rel(db, signals, "Dispara post_save (ItemServicoOS, OrdemServico, ConsumoItemServico)")
     Rel(signals, db, "Registra logs de auditoria (security)")
@@ -123,9 +122,9 @@ sequenceDiagram
     View->>ItemModel: Busca por ID
     ItemModel-->>View: instância
 
-    alt Status != PENDENTE
-        View-->>Mecanico: HTTP 400: Serviço não está pendente
-    else Status == PENDENTE
+    alt OS != EXECUCAO ou Status != PENDENTE
+        View-->>Mecanico: HTTP 400: OS precisa estar em EXECUCAO e serviço deve estar PENDENTE
+    else OS == EXECUCAO e Status == PENDENTE
         View->>ItemModel: Atualiza status=EM_EXECUCAO, data_inicio
         ItemModel->>DB: UPDATE item_servico_os
 
@@ -136,10 +135,7 @@ sequenceDiagram
             Consumo->>DB: UPDATE item_peca_os SET quantidade_utilizada += qtd
         end
 
-        View->>OSModel: Verifica se é primeiro serviço a iniciar
-        alt OS estava AGUARDANDO
-            OSModel->>DB: UPDATE ordem_servico SET status=EXECUCAO
-        end
+        View->>OSModel: Mantém OS em EXECUCAO; iniciar serviço não altera status da OS
 
         DB->>Signals: Dispara post_save
         Signals->>DB: Registra logs de auditoria (security)

@@ -47,13 +47,14 @@ Este documento consolida a aprovação do design arquitetural e técnico da Fase
 
 | # | Item | Status | Evidência |
 |---|---|---|---|
-| 16 | Cobertura de testes ≥ 80% | ✅ | 88% (`pytest --cov`) |
-| 17 | Testes passando | ✅ | 76/76 passando |
+| 16 | Cobertura de testes ≥ 80% | ✅ | 94% (`pytest --cov`) |
+| 17 | Testes passando | ✅ | 194/194 passando + 3 subtests |
 | 18 | Análise SAST (SonarQube) | ✅ | 0 bugs, 0 vulnerabilidades, Rating A |
 | 19 | OWASP Top 10 avaliado | ✅ | 9/10 conformes, 1 parcial |
 | 20 | Formato padronizado de erros | ✅ | `exceptions.py` |
 | 21 | Logs de auditoria de segurança | ✅ | `signals.py` (security logger) |
 | 22 | Proteções de produção (HTTPS, HSTS) | ✅ | `settings.py` (modo DEBUG=False) |
+| 23 | Schema OpenAPI válido | ✅ | 0 erros; 2 warnings não bloqueantes de enum `status` |
 
 ### 2.4 Documentação e Entrega
 
