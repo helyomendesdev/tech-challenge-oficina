@@ -57,15 +57,17 @@ jobs:
 
     - name: Deploy to Kubernetes
       run: |
+        # Criar namespace primeiro
+        kubectl apply -f k8s/namespace.yaml
+
         # Passo 5: Deploy do banco (StatefulSet + Service)
         kubectl apply -f k8s/postgres-statefulset.yaml
         kubectl apply -f k8s/postgres-service.yaml
 
         # Aguardar banco ficar pronto
-        kubectl wait --for=condition=ready pod -l app=postgres -n oficina --timeout=120s
+        kubectl wait --for=condition=ready pod -l app=postgres -n oficina --timeout=180s
 
-        # Passo 4 + 6: Deploy da app + manifests completos
-        kubectl apply -f k8s/namespace.yaml
+        # Passo 4 + 6: Deploy da app + manifests restantes
         kubectl apply -f k8s/configmap.yaml
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
