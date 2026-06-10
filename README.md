@@ -7,10 +7,11 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 ![DRF](https://img.shields.io/badge/DRF-3.15-red?style=flat)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?style=flat&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)
-![Cobertura](https://img.shields.io/badge/Cobertura-94%25-brightgreen?style=flat)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-kind-326CE5?style=flat&logo=kubernetes&logoColor=white)
+![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-oficina/ci.yml?branch=main&label=CI&logo=github)
+![CD](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-oficina/cd.yml?branch=main&label=CD&logo=github)
+![Cobertura](https://img.shields.io/badge/Cobertura-78%25-brightgreen?style=flat)
 ![Testes](https://img.shields.io/badge/Testes-194%20passando-brightgreen?style=flat)
-![SonarQube](https://img.shields.io/badge/SonarQube-A%20Rating-brightgreen?style=flat&logo=sonarqube&logoColor=white)
-![OWASP](https://img.shields.io/badge/OWASP%20Top%2010-Conformante-brightgreen?style=flat)
 
 ---
 
@@ -21,6 +22,9 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 - [Arquitetura](#arquitetura)
 - [Pré-requisitos](#pré-requisitos)
 - [Como Rodar](#como-rodar)
+  - [Com Docker (recomendado)](#com-docker-recomendado)
+  - [Com Kubernetes (kind)](#com-kubernetes-kind)
+- [CI/CD](#cicd)
 - [Variáveis de Ambiente](#variáveis-de-ambiente)
 - [Endpoints da API](#endpoints-da-api)
 - [Filtros e Busca](#filtros-e-busca)
@@ -38,7 +42,8 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 
 ## Visão Geral
 
-O sistema permite que uma oficina mecânica gerencie seu ciclo operacional completo:
+O sistema permite que uma oficina mecânica gerencie seu ciclo operacional completo,
+com evolucao para infraestrutura escalavel na Fase 2:
 
 - Cadastro de **clientes** (PF com CPF ou PJ com CNPJ) com validação de dígito verificador
 - Cadastro de **veículos** vinculados a clientes (placas no formato antigo e Mercosul)
@@ -71,7 +76,7 @@ O sistema permite que uma oficina mecânica gerencie seu ciclo operacional compl
 | Servidor WSGI | `gunicorn` (produção) |
 | Análise de segurança (SAST) | `SonarQube Community 26.4` |
 | Testes | `pytest-django` + `pytest-cov` |
-| Infraestrutura | Docker + Docker Compose |
+| Infraestrutura | Docker + Docker Compose + Kubernetes (kind) |
 
 ---
 
@@ -214,6 +219,49 @@ docker exec oficina_app python manage.py loaddata seed_data.json
 ```
 
 A API estará disponível em `http://localhost:8000`.
+
+### Com Kubernetes (kind)
+
+```bash
+# 1. Instale kind e kubectl
+brew install kind kubectl
+
+# 2. Crie o cluster
+kind create cluster --name oficina
+
+# 3. Aplique os manifests
+kubectl apply -f k8s/
+
+# 4. Aguarde os pods ficarem prontos
+kubectl wait --for=condition=ready pod -l app=postgres -n oficina --timeout=180s
+kubectl rollout status deployment/oficina-app -n oficina --timeout=180s
+
+# 5. Rode as migrations
+kubectl exec -n oficina deployment/oficina-app -- python manage.py migrate
+
+# 6. Acesse a API (em outro terminal)
+kubectl port-forward -n oficina svc/oficina-app 8000:8000
+```
+
+> **Nota:** O `k8s/secret.yaml` contém placeholders (`CHANGE_ME_*`). Configure valores reais antes de usar em produção.
+
+---
+
+## CI/CD
+
+O projeto utiliza **GitHub Actions** para integração e entrega contínuas:
+
+| Pipeline | Trigger | Etapas |
+|----------|---------|--------|
+| **CI** | push/PR em `main` ou `feat/*` | Build → Django check → 194 testes |
+| **CD** | merge em `main` | Build → testes → Docker image → dry-run K8s → deploy em kind |
+
+O CI é executado a cada push e valida a qualidade do código. O CD constrói a imagem Docker,
+cria um cluster kind, valida todos os manifests Kubernetes e aplica os recursos no cluster.
+
+Badges de status:
+[![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-oficina/ci.yml?branch=main&label=CI&logo=github)](https://github.com/helyomendesdev/tech-challenge-fase-1-oficina/actions/workflows/ci.yml)
+[![CD](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-oficina/cd.yml?branch=main&label=CD&logo=github)](https://github.com/helyomendesdev/tech-challenge-fase-1-oficina/actions/workflows/cd.yml)
 
 ### Sem Docker (desenvolvimento local)
 
