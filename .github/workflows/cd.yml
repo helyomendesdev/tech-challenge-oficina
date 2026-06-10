@@ -11,6 +11,9 @@ jobs:
     env:
       DJANGO_SECRET_KEY: "test-key-not-for-production"
       DJANGO_SETTINGS_MODULE: "app.settings_test"
+      POSTGRES_DB: "oficina_test"
+      POSTGRES_USER: "test_user"
+      POSTGRES_PASSWORD: "test_pass"
 
     steps:
     - uses: actions/checkout@v4
