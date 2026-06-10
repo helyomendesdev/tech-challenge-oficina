@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oficina-config
+  namespace: oficina
+data:
+  DJANGO_DEBUG: "False"
+  DJANGO_ALLOWED_HOSTS: "*"
+  DJANGO_SETTINGS_MODULE: "app.settings"
+  DB_HOST: "oficina-db"
+  DB_PORT: "5432"
+  DJANGO_LOG_FILE: "/tmp/oficina_atividades.log"
+  STATIC_ROOT: "/app/staticfiles"
