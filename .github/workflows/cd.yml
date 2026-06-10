@@ -65,16 +65,31 @@ jobs:
         # Criar namespace primeiro
         kubectl apply -f k8s/namespace.yaml
 
-        # Aplicar ConfigMap e Secret antes dos pods
+        # Aplicar ConfigMap antes dos pods
         kubectl apply -f k8s/configmap.yaml
 
         # Passo 5: Deploy do banco (StatefulSet + Service)
         kubectl apply -f k8s/postgres-statefulset.yaml
         kubectl apply -f k8s/postgres-service.yaml
 
-        # Aguardar banco ficar pronto (pode levar 3-5 min para baixar a imagem)
-        kubectl wait --for=condition=ready pod -l app=postgres -n oficina --timeout=300s
-        echo "PostgreSQL pronto!"
+        # Aguardar banco ficar pronto, mostrando status a cada 30s
+        echo "Aguardando postgres-0 ficar Ready..."
+        for i in $(seq 1 20); do
+          STATUS=$(kubectl get pod postgres-0 -n oficina -o jsonpath='{.status.phase}' 2>/dev/null || echo "Pendente")
+          REASON=$(kubectl get pod postgres-0 -n oficina -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || echo "")
+          echo "[$(date +%H:%M:%S)] postgres-0: $STATUS $REASON"
+          if kubectl wait --for=condition=ready pod postgres-0 -n oficina --timeout=30s 2>/dev/null; then
+            echo "PostgreSQL pronto!"
+            break
+          fi
+        done
+
+        # Se nao ficou pronto, mostrar descricao e sair
+        if ! kubectl get pod postgres-0 -n oficina -o jsonpath='{.status.phase}' 2>/dev/null | grep -q Running; then
+          echo "=== EVENTOS DO POD ==="
+          kubectl describe pod postgres-0 -n oficina 2>/dev/null | tail -30
+          exit 1
+        fi
 
         # Passo 4 + 6: Deploy da app + manifests restantes
         kubectl apply -f k8s/deployment.yaml
