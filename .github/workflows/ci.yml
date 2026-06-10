@@ -10,6 +10,11 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
 
+    env:
+      DJANGO_SECRET_KEY: "test-key-not-for-production"
+      DJANGO_SETTINGS_MODULE: "app.settings_test"
+      DATABASE_URL: "postgres://test_user:test_pass@localhost:5432/oficina_test"
+
     services:
       postgres:
         image: postgres:15
@@ -50,10 +55,6 @@ jobs:
 
     # Passo 2: Execucao dos testes automatizados
     - name: Run tests
-      env:
-        DATABASE_URL: postgres://test_user:test_pass@localhost:5432/oficina_test
-        DJANGO_SETTINGS_MODULE: app.settings_test
-        SECRET_KEY: test-key-not-for-production
       run: |
         python manage.py migrate
         python -m pytest atendimento/tests/ -v --tb=short --junitxml=report.xml

@@ -12,6 +12,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      DJANGO_SECRET_KEY: "test-key-not-for-production"
+      DJANGO_SETTINGS_MODULE: "app.settings_test"
+
     steps:
     - uses: actions/checkout@v4
 
