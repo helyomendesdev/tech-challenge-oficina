@@ -44,7 +44,12 @@ jobs:
 
     # --- Passo 3: Build da imagem Docker ---
     - name: Build Docker image
-      run: docker build -t oficina-app:latest .
+      run: |
+        for i in 1 2 3; do
+          docker build -t oficina-app:latest . && break
+          echo "Tentativa $i falhou. Tentando novamente em 10s..."
+          sleep 10
+        done
 
     # --- Passo 4+5+6: Deploy com kind ---
     - name: Create kind cluster
