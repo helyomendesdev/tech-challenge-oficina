@@ -24,6 +24,7 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 - [Como Rodar](#como-rodar)
   - [Com Docker (recomendado)](#com-docker-recomendado)
   - [Com Kubernetes (kind)](#com-kubernetes-kind)
+  - [Com Terraform (IaC)](#com-terraform-iac)
 - [CI/CD](#cicd)
 - [Variáveis de Ambiente](#variáveis-de-ambiente)
 - [Endpoints da API](#endpoints-da-api)
@@ -76,7 +77,7 @@ com evolucao para infraestrutura escalavel na Fase 2:
 | Servidor WSGI | `gunicorn` (produção) |
 | Análise de segurança (SAST) | `SonarQube Community 26.4` |
 | Testes | `pytest-django` + `pytest-cov` |
-| Infraestrutura | Docker + Docker Compose + Kubernetes (kind) |
+| Infraestrutura | Docker + Docker Compose + Kubernetes (kind) + Terraform (IaC) |
 
 ---
 
@@ -244,6 +245,33 @@ kubectl port-forward -n oficina svc/oficina-app 8000:8000
 ```
 
 > **Nota:** O `k8s/secret.yaml` contém placeholders (`CHANGE_ME_*`). Configure valores reais antes de usar em produção.
+
+### Com Terraform (IaC)
+
+Provisiona o cluster kind e aplica todos os recursos Kubernetes via Terraform. Consulte [`infra/README.md`](infra/README.md) para o guia completo.
+
+```bash
+cd infra/
+
+# 1. Inicialize os providers
+terraform init
+
+# 2. Configure as variáveis sensíveis
+export TF_VAR_postgres_password="sua_senha"
+export TF_VAR_django_secret_key="sua_secret_key"
+
+# 3. Aplique (cria cluster + todos os recursos K8s)
+terraform apply
+
+# 4. Carregue a imagem no cluster kind
+docker build -t oficina-app:latest .. && kind load docker-image oficina-app:latest --name oficina
+
+# 5. Rode as migrations
+kubectl exec -n oficina deployment/oficina-app -- python manage.py migrate
+
+# 6. Acesse a API
+kubectl port-forward -n oficina svc/oficina-app 8000:8000
+```
 
 ---
 
