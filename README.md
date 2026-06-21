@@ -1,6 +1,6 @@
 # 🔧 Oficina Mecânica API
 
-API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega do **Tech Challenge Fase 1** da pós-graduação em Software Architecture na FIAP.
+API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega do **Tech Challenge — Fases 1 e 2** da pós-graduação em Software Architecture na FIAP.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-5.1-092E20?style=flat&logo=django&logoColor=white)
@@ -36,7 +36,7 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 - [Testes](#testes)
 - [Estrutura do Projeto](#estrutura-do-projeto)
 - [Qualidade e Segurança](#qualidade-e-segurança)
-- [Documentação de Entrega — Fase 1](#documentação-de-entrega--fase-1)
+- [Documentação de Entrega](#documentação-de-entrega)
 - [Equipe](#equipe)
 
 ---
@@ -58,6 +58,17 @@ com evolucao para infraestrutura escalavel na Fase 2:
 - **Métricas de serviço** por OS: tempo de execução, peças consumidas, filtro por serviço
 - **Filtros avançados** por status, data, valor, nome e estoque em todos os endpoints
 - **Rate limiting** global e específico por endpoint
+
+### Fase 2 — Evolução da aplicação
+
+A Fase 2 evolui o sistema com foco em qualidade, resiliência e escalabilidade:
+
+- **Refatoração arquitetural**: Clean Architecture/Hexagonal pragmática com separação de camadas (`domain`, `application`, `infrastructure`, `interfaces`)
+- **APIs revisadas**: abertura unificada de OS, consulta de status com isolamento por usuário, fila operacional ordenada, aprovação externa de orçamento e atualização de status via notificações
+- **Conteinerização**: Dockerfile e docker-compose revisados para desenvolvimento local
+- **Orquestração K8s**: manifestos para Deployment, Service, ConfigMap, Secret, StatefulSet (PostgreSQL) e HPA (2-10 pods, CPU 70%)
+- **Infraestrutura como Código**: Terraform provisiona cluster kind e aplica todos os recursos K8s
+- **CI/CD**: GitHub Actions com pipeline de CI (build + 194 testes) e CD (build + testes + Docker + deploy K8s em kind)
 
 ---
 
@@ -184,6 +195,58 @@ RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE
 ![Diagrama de Sequência](docs/images/4%20-%20SequenceDiagram.png)
 
 > Os diagramas acima foram gerados a partir dos códigos Mermaid disponíveis em [`docs/arquitetura/c4-model.md`](docs/arquitetura/c4-model.md).
+
+### Infraestrutura provisionada (Fase 2)
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  Terraform (IaC) — infra/                                              │
+│  Provisiona cluster kind + aplica todos os recursos K8s               │
+└──────────────────────────┬───────────────────────────────────────────┘
+                           │
+┌──────────────────────────▼───────────────────────────────────────────┐
+│  Cluster Kubernetes (kind) — Namespace: oficina                        │
+│                                                                        │
+│  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐              │
+│  │  ConfigMap   │   │   Secret     │   │     HPA       │              │
+│  │ oficina-cfg  │   │ oficina-sec  │   │  2 → 10 pods  │              │
+│  │ (env vars)   │   │ (credenciais)│   │  CPU > 70%    │              │
+│  └──────────────┘   └──────────────┘   └───────────────┘              │
+│                                                                        │
+│  ┌───────────────────────┐      ┌───────────────────────┐             │
+│  │  Deployment           │      │  StatefulSet          │             │
+│  │  oficina-app          │      │  postgres             │             │
+│  │  2 réplicas           │      │  1 réplica            │             │
+│  │  gunicorn :8000       │      │  postgres:15          │             │
+│  │  probes tcp/8000      │      │  PVC 1Gi              │             │
+│  │  limits 500m/512Mi    │      │  limits 500m/512Mi    │             │
+│  └──────────┬────────────┘      └──────────┬────────────┘             │
+│             │ :8000                         │ :5432                    │
+│  ┌──────────▼────────────┐      ┌──────────▼────────────┐             │
+│  │  Service (ClusterIP)  │      │  Service (Headless)   │             │
+│  │  oficina-app:8000     │      │  oficina-db:5432      │             │
+│  └───────────────────────┘      └───────────────────────┘             │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Fluxo de deploy (CI/CD)
+
+```
+Push/PR ──► CI (ci.yml)
+             │ 1. Build (pip install)
+             │ 2. Django check
+             │ 3. 194 testes (pytest-django)
+             ▼
+Merge main ──► CD (cd.yml)
+             │ 1. Build + testes
+             │ 2. Docker build (oficina-app:latest)
+             │ 3. Cluster kind efêmero
+             │ 4. Dry-run manifests K8s
+             │ 5. Deploy no cluster
+             │ 6. Aplicar manifestos YAML
+             ▼
+Cluster kind pronto — kubectl port-forward → http://localhost:8000
+```
 
 ---
 
@@ -761,10 +824,9 @@ Com `DJANGO_DEBUG=False` no `.env`, as seguintes proteções são ativadas autom
 
 ---
 
-*Tech Challenge Fase 1 — Pós-graduação Software Architecture · FIAP*
-## Documentação de Entrega — Fase 1
+## Documentação de Entrega
 
-A documentação completa da Fase 1 está organizada na pasta `docs/`:
+A documentação completa do projeto está organizada na pasta `docs/`:
 
 ### Arquitetura
 
@@ -821,12 +883,11 @@ A documentação completa da Fase 1 está organizada na pasta `docs/`:
 
 | Nome | RM |
 |---|---|
-| Afonso Victoriano Franco | RM373563 |
 | Hélio Mendes da Silva | RM374170 |
-| João Pedro Rodrigues Martins | RM372818 |
+| Lucas Marques | RM369825 |
 | Luís Fernando Montes | RM367183 |
 | Sophia Sussa Campos Bastos | RM371864 |
 
 ---
 
-*Tech Challenge Fase 1 — Pós-graduação Software Architecture · FIAP · Grupo 26*
+*Tech Challenge — Fases 1 e 2 — Pós-graduação Software Architecture · FIAP · Grupo 26*

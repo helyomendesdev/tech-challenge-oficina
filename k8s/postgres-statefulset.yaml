@@ -4,7 +4,7 @@ metadata:
   name: postgres
   namespace: oficina
 spec:
-  serviceName: postgres
+  serviceName: oficina-db
   replicas: 1
   selector:
     matchLabels:
