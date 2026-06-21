@@ -39,6 +39,7 @@ Thumbs.db
 
 # Security / analysis generated files
 .hermes/
+.claude-flow/
 relatorio_vulnerabilidades.txt
 seguranca_atendimento.txt
 seguranca_settings.txt
