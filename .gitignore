@@ -43,3 +43,18 @@ relatorio_vulnerabilidades.txt
 seguranca_atendimento.txt
 seguranca_settings.txt
 .scannerwork/
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info
+infra/terraform.secret.tfvars
+infra/override.tf
+infra/override.tf.json
+infra/*_override.tf
+infra/*_override.tf.json
+infra/.terraformrc
+infra/terraform.rc
+*.tfplan
+crash.log
