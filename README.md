@@ -1,6 +1,6 @@
 # 🔧 Oficina Mecânica API
 
-API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega do **Tech Challenge — Fases 1 e 2** da pós-graduação em Software Architecture na FIAP.
+API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega do **Tech Challenge — Fases 1 e 2** da pós-graduação em Software Architecture na FIAP (Grupo 26 → Grupo 13).
 
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
 ![Django](https://img.shields.io/badge/Django-5.1-092E20?style=flat&logo=django&logoColor=white)
@@ -881,6 +881,8 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 
 ## Equipe
 
+### Grupo 13 — Fase 2 (atual)
+
 | Nome | RM |
 |---|---|
 | Hélio Mendes da Silva | RM374170 |
@@ -888,6 +890,16 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 | Luís Fernando Montes | RM367183 |
 | Sophia Sussa Campos Bastos | RM371864 |
 
+### Grupo 26 — Fase 1 (original)
+
+| Nome | RM |
+|---|---|
+| Afonso Victoriano Franco | RM373563 |
+| Hélio Mendes da Silva | RM374170 |
+| João Pedro Rodrigues Martins | RM372818 |
+| Luís Fernando Montes | RM367183 |
+| Sophia Sussa Campos Bastos | RM371864 |
+
 ---
 
-*Tech Challenge — Fases 1 e 2 — Pós-graduação Software Architecture · FIAP · Grupo 26*
+*Tech Challenge — Fases 1 e 2 — Pós-graduação Software Architecture · FIAP · Grupo 26 (Fase 1) → Grupo 13 (Fase 2)*
