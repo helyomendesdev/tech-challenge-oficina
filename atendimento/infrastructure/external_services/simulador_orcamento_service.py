@@ -34,9 +34,9 @@ class SimuladorOrcamentoService:
         self,
         ordem_servico_id: int,
         decisao: str,
-        motivo: str = ""
+        motivo: str = "",
+        authorization: str | None = None,
     ):
-        
         payload = {
             "ordem_servico_id": ordem_servico_id,
             "decisao": decisao,
@@ -44,9 +44,15 @@ class SimuladorOrcamentoService:
             "motivo": motivo,
         }
 
+        headers = {}
+
+        if authorization:
+            headers["Authorization"] = authorization
+
         response = requests.post(
             "http://localhost:8000/api/v1/orcamentos/notificacoes/",
             json=payload,
+            headers=headers,
             timeout=5,
         )
 

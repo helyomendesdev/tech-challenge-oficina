@@ -27,6 +27,7 @@ from atendimento.infrastructure.factories import (
     build_consultar_status_ordem_servico_use_case,
     build_listar_fila_ordens_servico_use_case,
     build_processar_resposta_orcamento_use_case,
+    build_simulador_orcamento_service,
 )
 from atendimento.interfaces.api.serializers import (
     AbrirOrdemServicoInputSerializer,
@@ -37,6 +38,7 @@ from atendimento.interfaces.api.serializers import (
     FilaOrdemServicoItemOutputSerializer,
     ProcessarRespostaOrcamentoInputSerializer,
     ProcessarRespostaOrcamentoOutputSerializer,
+    SimulacaoOrcamentoInputSerializer,
     montar_consultar_status_dto,
     montar_listar_fila_dto,
 )
@@ -269,6 +271,66 @@ class ProcessarRespostaOrcamentoAPIView(APIView):
             return handle_domain_error(exc)
         output_serializer = ProcessarRespostaOrcamentoOutputSerializer(output_dto)
         return Response(output_serializer.data)
+
+
+class SimulacaoOrcamentoAPIView(APIView):
+    """Endpoint para simular um sistema externo notificando decisão de orçamento."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        tags=["Fase 2 - Simulação"],
+        summary="Simula aprovação ou recusa de orçamento",
+        description=(
+            "Simula um sistema externo enviando uma decisão de orçamento "
+            "para o webhook da oficina. O endpoint dispara uma chamada HTTP "
+            "para /api/v1/orcamentos/notificacoes/."
+        ),
+        request=SimulacaoOrcamentoInputSerializer,
+        responses={
+            200: OpenApiResponse(
+                description="Resposta retornada pelo webhook."
+            ),
+            400: OpenApiResponse(
+                description="Payload inválido."
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                "Aprovar orçamento",
+                value={
+                    "ordem_servico_id": 8,
+                    "decisao": "APROVADO",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Recusar orçamento",
+                value={
+                    "ordem_servico_id": 8,
+                    "decisao": "RECUSADO",
+                    "motivo": "Cliente não aprovou o valor.",
+                },
+                request_only=True,
+            ),
+        ],
+    )
+    def post(self, request):
+        serializer = SimulacaoOrcamentoInputSerializer(
+            data=request.data
+        )
+        serializer.is_valid(raise_exception=True)
+
+        service = build_simulador_orcamento_service()
+
+        resposta = service.enviar_decisao(
+            ordem_servico_id=serializer.validated_data["ordem_servico_id"],
+            decisao=serializer.validated_data["decisao"],
+            motivo=serializer.validated_data.get("motivo", ""),
+            authorization=request.headers.get("Authorization"),
+        )
+
+        return Response(resposta)
 
 
 class AtualizarStatusPorNotificacaoAPIView(APIView):

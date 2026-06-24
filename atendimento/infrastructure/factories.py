@@ -40,6 +40,9 @@ from atendimento.infrastructure.repositories.django_veiculo_repository import (
 from atendimento.infrastructure.transactions.django_transaction_manager import (
     DjangoTransactionManager,
 )
+from atendimento.infrastructure.external_services.simulador_orcamento_service import (
+    SimuladorOrcamentoService,
+)
 
 
 def build_abrir_ordem_servico_use_case() -> AbrirOrdemServicoUseCase:
@@ -98,3 +101,7 @@ def build_finalizar_servico_use_case():
         ordem_servico_repository=DjangoOrdemServicoRepository(),
         transaction_manager=DjangoTransactionManager(),
     )
+
+def build_simulador_orcamento_service():
+    """Monta o serviço simulador de integração externa de orçamento."""
+    return SimuladorOrcamentoService()

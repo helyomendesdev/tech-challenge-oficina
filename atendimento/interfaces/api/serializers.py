@@ -179,6 +179,30 @@ class FilaOrdemServicoItemOutputSerializer(serializers.Serializer):
     valor_total = serializers.DecimalField(max_digits=10, decimal_places=2)
 
 
+class SimulacaoOrcamentoInputSerializer(serializers.Serializer):
+    """
+    Entrada HTTP para disparar uma simulação de sistema externo.
+
+    Os dados recebidos serão utilizados pelo simulador para enviar
+    uma notificação HTTP ao webhook de aprovação/recusa de orçamento.
+    """
+
+    ordem_servico_id = serializers.IntegerField(min_value=1)
+
+    decisao = serializers.ChoiceField(
+        choices=[
+            DecisaoOrcamento.APROVADO.value,
+            DecisaoOrcamento.RECUSADO.value,
+        ],
+    )
+
+    motivo = serializers.CharField(
+        allow_blank=True,
+        default="",
+        required=False,
+    )
+
+
 class ProcessarRespostaOrcamentoInputSerializer(serializers.Serializer):
     """Entrada HTTP para decisao externa de aprovacao ou recusa de orcamento."""
 
