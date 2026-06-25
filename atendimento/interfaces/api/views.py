@@ -330,6 +330,12 @@ class SimulacaoOrcamentoAPIView(APIView):
             authorization=request.headers.get("Authorization"),
         )
 
+        if resposta.get("erro"):
+            return Response(
+                resposta,
+                status=resposta.get("status_code", 400),
+            )
+
         return Response(resposta)
 
 

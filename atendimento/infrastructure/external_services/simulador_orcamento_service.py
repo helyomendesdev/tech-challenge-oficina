@@ -30,13 +30,17 @@ class SimuladorOrcamentoService:
         nos fluxos internos da aplicação.
     """
 
+    URL_NOTIFICACAO = (
+        "http://localhost:8000/api/v1/orcamentos/notificacoes/"
+    )
+
     def enviar_decisao(
         self,
         ordem_servico_id: int,
         decisao: str,
         motivo: str = "",
         authorization: str | None = None,
-    ):
+    ) -> dict:
         payload = {
             "ordem_servico_id": ordem_servico_id,
             "decisao": decisao,
@@ -49,13 +53,33 @@ class SimuladorOrcamentoService:
         if authorization:
             headers["Authorization"] = authorization
 
-        response = requests.post(
-            "http://localhost:8000/api/v1/orcamentos/notificacoes/",
-            json=payload,
-            headers=headers,
-            timeout=5,
-        )
+        try:
+            response = requests.post(
+                self.URL_NOTIFICACAO,
+                json=payload,
+                headers=headers,
+                timeout=5,
+            )
 
-        response.raise_for_status()
+            response.raise_for_status()
 
-        return response.json()
+            return response.json()
+
+        except requests.exceptions.HTTPError:
+            try:
+                erro = response.json()
+            except ValueError:
+                erro = {"mensagem": response.text}
+
+            return {
+                "erro": True,
+                "status_code": response.status_code,
+                "detalhes": erro,
+            }
+
+        except requests.exceptions.RequestException as exc:
+            return {
+                "erro": True,
+                "status_code": 503,
+                "mensagem": f"Falha ao comunicar com o webhook: {exc}",
+            }
