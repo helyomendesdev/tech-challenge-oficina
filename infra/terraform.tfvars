@@ -1,0 +1,7 @@
+cluster_name         = "oficina"
+namespace            = "oficina"
+app_image            = "oficina-app:latest"
+postgres_db          = "oficina"
+postgres_user        = "oficina_user"
+django_debug         = "False"
+django_allowed_hosts = "*"
