@@ -8,6 +8,7 @@ from atendimento.interfaces.api.views import (
     ConsultarStatusOrdemServicoAPIView,
     ListarFilaOrdensServicoAPIView,
     ProcessarRespostaOrcamentoAPIView,
+    SimulacaoOrcamentoAPIView,
 )
 
 
@@ -36,5 +37,9 @@ urlpatterns = [
         "orcamentos/notificacoes/",
         ProcessarRespostaOrcamentoAPIView.as_view(),
         name="processar-resposta-orcamento",
+    ),
+    path(
+        "simulacao/orcamento/",
+        SimulacaoOrcamentoAPIView.as_view(),
     ),
 ]
