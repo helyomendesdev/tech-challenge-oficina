@@ -9,5 +9,6 @@ data:
   DJANGO_SETTINGS_MODULE: "app.settings"
   DB_HOST: "oficina-db"
   DB_PORT: "5432"
+  SECURE_SSL_REDIRECT: "False"
   DJANGO_LOG_FILE: "/tmp/oficina_atividades.log"
   STATIC_ROOT: "/app/staticfiles"
