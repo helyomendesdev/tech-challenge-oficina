@@ -1,9 +1,17 @@
 from django.contrib import admin
+from django.http import JsonResponse
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from atendimento.auth_views import TokenObtainPairView, TokenRefreshView
 
+
+def health_check(request):
+    """Endpoint raiz para liveness/readiness probes do Kubernetes."""
+    return JsonResponse({"status": "ok"})
+
+
 urlpatterns = [
+    path('', health_check, name='health-check'),
     path('admin/', admin.site.urls),
 
     # Suas rotas da Oficina
