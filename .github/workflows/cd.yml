@@ -76,17 +76,17 @@ jobs:
         kubectl apply -f k8s/namespace.yaml
         kubectl apply -f k8s/configmap.yaml
         kubectl apply -f k8s/secret.yaml
+        kubectl apply -f k8s/postgres-statefulset.yaml
+        kubectl apply -f k8s/postgres-service.yaml
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
         kubectl apply -f k8s/hpa.yaml
-        kubectl apply -f k8s/postgres-statefulset.yaml
-        kubectl apply -f k8s/postgres-service.yaml
-        echo "✅ Todos os manifestos aplicados (app + banco)"
+        echo "✅ Todos os manifestos aplicados (banco primeiro, app depois)"
 
     - name: Aguardar pods ficarem prontos
       run: |
         echo "Aguardando pods do banco..."
         kubectl rollout status statefulset/postgres -n oficina --timeout=120s
-        echo "Aguardando pods da aplicacao..."
-        kubectl rollout status deployment/oficina-app -n oficina --timeout=120s
+        echo "Aguardando pods da aplicacao (inclui migracoes no initContainer)..."
+        kubectl rollout status deployment/oficina-app -n oficina --timeout=300s
         echo "✅ Todos os pods estao prontos"
