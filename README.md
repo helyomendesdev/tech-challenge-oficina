@@ -668,6 +668,7 @@ ProcessarRespostaOrcamentoUseCase
 
 O simulador reutiliza o token JWT da requisição para autenticar a chamada HTTP ao webhook interno, reproduzindo o fluxo de uma integração protegida por autenticação.
 Diferentemente do FakeNotificationAdapter utilizado nos fluxos internos, o simulador realiza uma chamada HTTP real utilizando a biblioteca requests, representando uma integração externa.
+WEBHOOK_ORCAMENTO_URL: URL utilizada pelo simulador para enviar notificações de orçamento. Em desenvolvimento, o valor padrão é http://localhost:8000/api/v1/orcamentos/notificacoes/. Em ambientes como Docker Compose, Kubernetes ou produção, configure essa variável para o endereço da API.
 
 A API possui dois endpoints relacionados ao orçamento:
 
@@ -926,7 +927,9 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 
 | Nome | RM |
 |---|---|
+| Afonso Victoriano Franco | RM373563 |
 | Hélio Mendes da Silva | RM374170 |
+| João Pedro Rodrigues Martins | RM372818 |
 | Luís Fernando Montes | RM367183 |
 | Sophia Sussa Campos Bastos | RM371864 |
 
