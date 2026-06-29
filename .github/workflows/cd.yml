@@ -71,11 +71,22 @@ jobs:
         kubectl apply --dry-run=client -f k8s/postgres-service.yaml
         echo "✅ Todos os manifests sao validos"
 
-    - name: Deploy aplicacao (sem banco)
+    - name: Deploy aplicacao + banco de dados
       run: |
         kubectl apply -f k8s/namespace.yaml
         kubectl apply -f k8s/configmap.yaml
+        kubectl apply -f k8s/secret.yaml
         kubectl apply -f k8s/deployment.yaml
         kubectl apply -f k8s/service.yaml
         kubectl apply -f k8s/hpa.yaml
-        echo "✅ Manifestos aplicados. Pulando verificacao de Ready (sem banco de dados no kind)"
+        kubectl apply -f k8s/postgres-statefulset.yaml
+        kubectl apply -f k8s/postgres-service.yaml
+        echo "✅ Todos os manifestos aplicados (app + banco)"
+
+    - name: Aguardar pods ficarem prontos
+      run: |
+        echo "Aguardando pods do banco..."
+        kubectl rollout status statefulset/postgres -n oficina --timeout=120s
+        echo "Aguardando pods da aplicacao..."
+        kubectl rollout status deployment/oficina-app -n oficina --timeout=120s
+        echo "✅ Todos os pods estao prontos"

@@ -745,6 +745,145 @@
               "body": "{\n  \"erro\": true,\n  \"status_code\": 400,\n  \"mensagem\": \"Nao e possivel finalizar a OS: existem servicos nao concluidos.\"\n}"
             }
           ]
+        },
+        {
+          "name": "Simulação de aprovação de orçamento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/simulacao/orcamento/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "simulacao",
+                "orcamento",
+                ""
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ordem_servico_id\": {{os_id}},\n  \"decisao\": \"APROVADO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Simula um sistema externo enviando uma decisão de orçamento para o webhook da oficina. O endpoint dispara uma chamada HTTP para /api/v1/orcamentos/notificacoes/. Use APROVADO ou RECUSADO no campo decisao. Para RECUSADO, inclua o campo motivo."
+          },
+          "response": [
+            {
+              "name": "200 - Aprovação processada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/simulacao/orcamento/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "simulacao",
+                    "orcamento",
+                    ""
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ordem_servico_id\": 8,\n  \"decisao\": \"APROVADO\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"status\": \"AGUARDANDO\",\n  \"mensagem\": \"Orçamento aprovado com sucesso. OS atualizada para AGUARDANDO APROVACAO.\"\n}"
+            },
+            {
+              "name": "200 - Recusa processada",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/simulacao/orcamento/",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "simulacao",
+                    "orcamento",
+                    ""
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ordem_servico_id\": 8,\n  \"decisao\": \"RECUSADO\",\n  \"motivo\": \"Cliente nao aprovou o valor.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"status\": \"CANCELADA\",\n  \"mensagem\": \"Orçamento recusado. OS cancelada.\"\n}"
+            }
+          ]
         }
       ]
     },

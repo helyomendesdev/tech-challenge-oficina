@@ -62,6 +62,10 @@ jobs:
         python manage.py migrate
         python -m pytest atendimento/tests/ -v --tb=short --junitxml=report.xml
 
+    # Passo 3: Build da imagem Docker
+    - name: Build Docker image
+      run: docker build -t oficina-app:latest .
+
     - name: Upload test report
       if: always()
       uses: actions/upload-artifact@v4
