@@ -90,3 +90,13 @@ jobs:
         echo "Aguardando pods da aplicacao (inclui migracoes no initContainer)..."
         kubectl rollout status deployment/oficina-app -n oficina --timeout=300s
         echo "✅ Todos os pods estao prontos"
+
+    - name: Debug - estado dos pods (sempre executa)
+      if: always()
+      run: |
+        echo "=== kubectl get all ==="
+        kubectl get all -n oficina 2>&1 || true
+        echo "=== kubectl describe pods ==="
+        kubectl describe pods -n oficina 2>&1 || true
+        echo "=== logs initContainers + containers ==="
+        kubectl logs -n oficina --all-containers --init-containers --tail=100 2>&1 || true
