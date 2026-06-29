@@ -1,4 +1,5 @@
 import requests
+from django.conf import settings
 
 
 class SimuladorOrcamentoService:
@@ -30,10 +31,6 @@ class SimuladorOrcamentoService:
         nos fluxos internos da aplicação.
     """
 
-    URL_NOTIFICACAO = (
-        "http://localhost:8000/api/v1/orcamentos/notificacoes/"
-    )
-
     def enviar_decisao(
         self,
         ordem_servico_id: int,
@@ -55,7 +52,7 @@ class SimuladorOrcamentoService:
 
         try:
             response = requests.post(
-                self.URL_NOTIFICACAO,
+                settings.WEBHOOK_ORCAMENTO_URL,
                 json=payload,
                 headers=headers,
                 timeout=5,
