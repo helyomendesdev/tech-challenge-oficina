@@ -35,7 +35,6 @@ services:
              gunicorn app.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60"
     volumes:
       - .:/app
-      - static_volume:/app/staticfiles
     ports:
       - "8000:8000"
     env_file:
@@ -46,9 +45,16 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - DB_HOST=db
       - DJANGO_LOG_FILE=/tmp/oficina_atividades.log
+      - STATIC_ROOT=/tmp/staticfiles
     depends_on:
       db:
         condition: service_healthy  # M5: aguarda o banco estar saudável
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     deploy:
       resources:
         limits:
@@ -57,4 +63,3 @@ services:
 
 volumes:
   postgres_data:
-  static_volume:
