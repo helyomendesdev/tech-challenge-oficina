@@ -3,22 +3,31 @@ name: CD
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_hpa_test:
+        description: Executar teste completo de scale-up e scale-down
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
 
 jobs:
-  deploy:
+  deploy-kind:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 30
     env:
-      DJANGO_SECRET_KEY: "test-key-not-for-production"
-      DJANGO_SETTINGS_MODULE: "app.settings_test"
-      POSTGRES_DB: "oficina_test"
-      POSTGRES_USER: "test_user"
-      POSTGRES_PASSWORD: "test_pass"
+      DJANGO_SECRET_KEY: test-only-${{ github.run_id }}-${{ github.run_attempt }}
+      DJANGO_SETTINGS_MODULE: app.settings_test
+      POSTGRES_DB: oficina_test
+      POSTGRES_USER: test_user
+      POSTGRES_PASSWORD: test-only-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
     - uses: actions/checkout@v4
 
-    # --- Passo 1: Build da aplicacao ---
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -27,13 +36,43 @@ jobs:
     - name: Install dependencies
       run: pip install -r requirements.txt
 
-    - name: Django system check
-      run: python manage.py check --settings=app.settings_test
-
-    # --- Passo 2: Execucao dos testes automatizados ---
-    - name: Run tests
+    - name: Validate application
       run: |
+        python manage.py check --settings=app.settings_test
+        python manage.py makemigrations --check --dry-run --settings=app.settings_test
+        python manage.py spectacular --validate --file schema.yml --settings=app.settings_test
         python -m pytest atendimento/tests/ -v --tb=short --junitxml=report.xml
+
+    - name: Create Kind cluster
+      uses: helm/kind-action@v1
+      with:
+        cluster_name: oficina
+
+    - name: Deploy application, database and Metrics Server
+      run: bash scripts/kind-deploy.sh
+
+    - name: Validate migrations in cluster
+      run: kubectl exec -n oficina deployment/oficina-app -- python manage.py migrate --check
+
+    - name: Smoke test deployed APIs
+      run: python scripts/smoke_test.py
+
+    - name: Validate Metrics API and numeric HPA metrics
+      run: |
+        kubectl get apiservice v1beta1.metrics.k8s.io
+        kubectl top nodes
+        kubectl top pods -n oficina
+        METRIC="$(kubectl get hpa oficina-app-hpa -n oficina -o jsonpath='{.status.currentMetrics[0].resource.current.averageUtilization}')"
+        test -n "$METRIC"
+        case "$METRIC" in (*[!0-9]*) exit 1;; esac
+        kubectl get hpa oficina-app-hpa -n oficina
+
+    - name: Prove HPA scale-up and scale-down
+      if: github.event_name == 'workflow_dispatch' && inputs.run_hpa_test
+      env:
+        HPA_LOAD_SECONDS: "180"
+        HPA_SCALE_DOWN_TIMEOUT: "420"
+      run: python scripts/hpa_load_test.py
 
     - name: Upload test report
       if: always()
@@ -42,61 +81,11 @@ jobs:
         name: test-report
         path: report.xml
 
-    # --- Passo 3: Build da imagem Docker ---
-    - name: Build Docker image
-      run: |
-        for i in 1 2 3; do
-          docker build -t oficina-app:latest . && break
-          echo "Tentativa $i falhou. Tentando novamente em 10s..."
-          sleep 10
-        done
-
-    # --- Passo 4+5+6: Validar manifests com kind ---
-    - name: Create kind cluster
-      uses: helm/kind-action@v1
-      with:
-        cluster_name: oficina
-
-    - name: Load Docker image into kind
-      run: kind load docker-image oficina-app:latest --name oficina
-
-    - name: Validar manifests Kubernetes
-      run: |
-        kubectl apply --dry-run=client -f k8s/namespace.yaml
-        kubectl apply --dry-run=client -f k8s/configmap.yaml
-        kubectl apply --dry-run=client -f k8s/deployment.yaml
-        kubectl apply --dry-run=client -f k8s/service.yaml
-        kubectl apply --dry-run=client -f k8s/hpa.yaml
-        kubectl apply --dry-run=client -f k8s/postgres-statefulset.yaml
-        kubectl apply --dry-run=client -f k8s/postgres-service.yaml
-        echo "✅ Todos os manifests sao validos"
-
-    - name: Deploy aplicacao + banco de dados
-      run: |
-        kubectl apply -f k8s/namespace.yaml
-        kubectl apply -f k8s/configmap.yaml
-        kubectl apply -f k8s/secret.yaml
-        kubectl apply -f k8s/postgres-statefulset.yaml
-        kubectl apply -f k8s/postgres-service.yaml
-        kubectl apply -f k8s/deployment.yaml
-        kubectl apply -f k8s/service.yaml
-        kubectl apply -f k8s/hpa.yaml
-        echo "✅ Todos os manifestos aplicados (banco primeiro, app depois)"
-
-    - name: Aguardar pods ficarem prontos
-      run: |
-        echo "Aguardando pods do banco..."
-        kubectl rollout status statefulset/postgres -n oficina --timeout=120s
-        echo "Aguardando pods da aplicacao (inclui migracoes no initContainer)..."
-        kubectl rollout status deployment/oficina-app -n oficina --timeout=300s
-        echo "✅ Todos os pods estao prontos"
-
-    - name: Debug - estado dos pods (sempre executa)
+    - name: Cluster diagnostics
       if: always()
       run: |
-        echo "=== kubectl get all ==="
-        kubectl get all -n oficina 2>&1 || true
-        echo "=== kubectl describe pods ==="
-        kubectl describe pods -n oficina 2>&1 || true
-        echo "=== logs initContainers + containers ==="
-        kubectl logs -n oficina --all-containers --init-containers --tail=100 2>&1 || true
+        kubectl get nodes -o wide 2>&1 || true
+        kubectl get pods -A -o wide 2>&1 || true
+        kubectl get services,deployments,statefulsets,hpa -n oficina 2>&1 || true
+        kubectl describe hpa oficina-app-hpa -n oficina 2>&1 || true
+        kubectl logs -n oficina --all-containers --tail=100 2>&1 || true

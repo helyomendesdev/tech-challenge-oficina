@@ -20,27 +20,6 @@ spec:
       labels:
         app: oficina-app
     spec:
-      initContainers:
-      - name: migrate
-        image: oficina-app:latest
-        imagePullPolicy: IfNotPresent
-        envFrom:
-        - configMapRef:
-            name: oficina-config
-        - secretRef:
-            name: oficina-secret
-        command:
-        - sh
-        - -c
-        - |
-          echo "Aguardando postgres ficar disponivel..."
-          until python -c "import socket; s=socket.create_connection(('oficina-db', 5432), timeout=2); s.close()" 2>/dev/null; do
-            echo "Postgres nao esta pronto. Tentando novamente em 3s..."
-            sleep 3
-          done
-          echo "Postgres disponivel. Executando migracoes..."
-          python manage.py migrate --noinput
-          echo "Migracoes concluidas."
       containers:
       - name: app
         image: oficina-app:latest
@@ -54,7 +33,7 @@ spec:
             name: oficina-secret
         resources:
           requests:
-            cpu: "250m"
+            cpu: "100m"
             memory: "256Mi"
           limits:
             cpu: "500m"

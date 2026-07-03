@@ -97,10 +97,10 @@ atendimento/
 |----------|-----------|-------------------|
 | `k8s/namespace.yaml` | Namespace dedicado `oficina` | `kubectl apply -f` cria o namespace |
 | `k8s/configmap.yaml` | Variaveis nao sensiveis (DEBUG=False, DJANGO_SETTINGS_MODULE) | Pod enxerga via env var |
-| `k8s/secret.yaml` | Credenciais (DB password, SECRET_KEY, tokens) | Criado via `kubectl apply -f` ou `kubectl create secret` |
+| Secret `oficina-secret` | Credenciais (DB password e SECRET_KEY) | Gerado dinamicamente pelos scripts via `kubectl create secret`; não versionado |
 | `k8s/deployment.yaml` | Deployment da app (2+ replicas, probes, resource limits) | Rolling update sem downtime |
 | `k8s/service.yaml` | Service ClusterIP para comunicacao interna | `kubectl get svc` lista o servico |
-| `k8s/hpa.yaml` | HPA escalando de 2 a 10 pods por CPU > 70% | `kubectl get hpa` mostra metricas |
+| `k8s/hpa.yaml` | HPA escalando de 2 a 6 pods por CPU > 50% | `kubectl get hpa` mostra métricas numéricas e o teste comprova scale-up/down |
 | `k8s/postgres-statefulset.yaml` | StatefulSet do PostgreSQL com PersistentVolume | Dados persistem apos restart do pod |
 | `k8s/postgres-service.yaml` | Service para o banco | App conecta via nome do servico |
 
@@ -184,14 +184,14 @@ Requisito oficial: "Alterar/criar as seguintes APIs"
                               v                 v
                          [Deployment]     [StatefulSet]
                          oficina-app      postgres
-                         2-10 pods        1 pod + PVC
+                         2-6 pods         1 pod + PVC
                               |                 |
                               v                 v
                          [Service]         [Service]
                          ClusterIP:8000    Headless:5432
                               |
                               v
-                         [HPA: CPU>70%]
+                         [HPA: CPU>50%]
                          (escala 2->10)
 ```
 
@@ -199,7 +199,7 @@ Requisito oficial: "Alterar/criar as seguintes APIs"
 
 ```
 Namespace: oficina
-├── Deployment: oficina-app (2-10 replicas)
+├── Deployment: oficina-app (2-6 réplicas)
 │   ├── LivenessProbe: HTTP GET /
 │   ├── ReadinessProbe: HTTP GET /
 │   ├── StartupProbe: HTTP GET / (failureThreshold: 30)
@@ -207,7 +207,7 @@ Namespace: oficina
 │   ├── Secret: credenciais
 │   └── Resource: requests 250m/256Mi, limits 500m/512Mi
 ├── Service: oficina-app (ClusterIP:8000)
-├── HPA: CPU > 70% (min 2, max 10)
+├── HPA: CPU > 50% (min 2, max 6)
 ├── StatefulSet: postgres (1 replica)
 │   ├── PVC: 1Gi (ReadWriteOnce)
 │   └── LivenessProbe: pg_isready

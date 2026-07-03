@@ -66,7 +66,7 @@ A Fase 2 evolui o sistema com foco em qualidade, resiliência e escalabilidade:
 - **Refatoração arquitetural**: Clean Architecture/Hexagonal pragmática com separação de camadas (`domain`, `application`, `infrastructure`, `interfaces`)
 - **APIs revisadas**: abertura unificada de OS, consulta de status com isolamento por usuário, fila operacional ordenada, aprovação externa de orçamento e atualização de status via notificações
 - **Conteinerização**: Dockerfile e docker-compose revisados para desenvolvimento local
-- **Orquestração K8s**: manifestos para Deployment, Service, ConfigMap, Secret, StatefulSet (PostgreSQL) e HPA (2-10 pods, CPU 70%)
+- **Orquestração K8s**: manifests para Deployment, Services, ConfigMap, StatefulSet, Secret dinâmico e HPA comprovado (2-6 pods, CPU 50%)
 - **Infraestrutura como Código**: Terraform provisiona cluster kind e aplica todos os recursos K8s
 - **CI/CD**: GitHub Actions com pipeline de CI (build + 194 testes) e CD (build + testes + Docker + deploy K8s em kind)
 
@@ -210,7 +210,7 @@ RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE
 │  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐              │
 │  │  ConfigMap   │   │   Secret     │   │     HPA       │              │
 │  │ oficina-cfg  │   │ oficina-sec  │   │  2 → 10 pods  │              │
-│  │ (env vars)   │   │ (credenciais)│   │  CPU > 70%    │              │
+│  │ (env vars)   │   │ (credenciais)│   │  CPU > 50%    │              │
 │  └──────────────┘   └──────────────┘   └───────────────┘              │
 │                                                                        │
 │  ┌───────────────────────┐      ┌───────────────────────┐             │
@@ -218,7 +218,7 @@ RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE
 │  │  oficina-app          │      │  postgres             │             │
 │  │  2 réplicas           │      │  1 réplica            │             │
 │  │  gunicorn :8000       │      │  postgres:15          │             │
-│  │  probes tcp/8000      │      │  PVC 1Gi              │             │
+│  │  probes HTTP health   │      │  PVC 1Gi              │             │
 │  │  limits 500m/512Mi    │      │  limits 500m/512Mi    │             │
 │  └──────────┬────────────┘      └──────────┬────────────┘             │
 │             │ :8000                         │ :5432                    │
@@ -286,28 +286,47 @@ A API estará disponível em `http://localhost:8000`.
 
 ### Com Kubernetes (kind)
 
-```bash
-# 1. Instale kind e kubectl
-brew install kind kubectl
+O deploy local cria ou reutiliza com segurança o cluster `oficina`, constrói e
+carrega a imagem, gera Secrets locais dinamicamente, executa migrations,
+instala o Metrics Server e aguarda todos os rollouts.
 
-# 2. Crie o cluster
-kind create cluster --name oficina
+**Windows PowerShell:**
 
-# 3. Aplique os manifests
-kubectl apply -f k8s/
-
-# 4. Aguarde os pods ficarem prontos
-kubectl wait --for=condition=ready pod -l app=postgres -n oficina --timeout=180s
-kubectl rollout status deployment/oficina-app -n oficina --timeout=180s
-
-# 5. Rode as migrations
-kubectl exec -n oficina deployment/oficina-app -- python manage.py migrate
-
-# 6. Acesse a API (em outro terminal)
-kubectl port-forward -n oficina svc/oficina-app 8000:8000
+```powershell
+.\scripts\kind-deploy.ps1
+python .\scripts\smoke_test.py
+python .\scripts\hpa_load_test.py
 ```
 
-> **Nota:** O `k8s/secret.yaml` contém placeholders (`CHANGE_ME_*`). Configure valores reais antes de usar em produção.
+**Linux / GitHub Actions:**
+
+```bash
+chmod +x scripts/kind-deploy.sh
+./scripts/kind-deploy.sh
+python scripts/smoke_test.py
+python scripts/hpa_load_test.py
+```
+
+O teste de HPA registra réplicas e CPU antes, durante e depois da carga, e
+falha se não observar tanto scale-up quanto scale-down. O CD executa deploy,
+smoke e validação das métricas em todo push; o teste completo de HPA fica no
+gatilho manual `workflow_dispatch` por levar alguns minutos.
+
+O repositório não contém um Secret aplicável. Os scripts criam
+`oficina-secret` com valores aleatórios ou variáveis de ambiente. Em cluster
+reutilizado, o Secret existente é preservado para manter compatibilidade com o
+volume persistente do PostgreSQL e o deploy falha se encontrar `CHANGE_ME_*`.
+
+Para inspecionar o ambiente manualmente:
+
+```bash
+kubectl get nodes
+kubectl get pods -A
+kubectl get pods,services,deployments,statefulsets,hpa -n oficina
+kubectl top nodes
+kubectl top pods -n oficina
+kubectl port-forward -n oficina svc/oficina-app 8000:8000
+```
 
 ### Com Terraform (IaC)
 
