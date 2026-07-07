@@ -163,6 +163,10 @@ O sistema deve permitir informar, no momento de iniciar um serviço, quais peça
 
 O sistema deve fornecer métricas de execução por OS, incluindo tempo de execução de cada serviço e peças consumidas.
 
+O sistema também deve fornecer o tempo médio de execução agrupado por tipo de
+serviço, considerando somente execuções concluídas com início, finalização e
+duração não negativa. Serviços sem execução válida são omitidos do resultado.
+
 ---
 
 ## 9. Tabela de Rastreabilidade
@@ -185,4 +189,4 @@ O sistema deve fornecer métricas de execução por OS, incluindo tempo de execu
 | RF014 | `ItemServicoOSViewSet.destroy()` | Sim |
 | RF015 | `ItemPecaOSSerializer` + `ItemPecaOS.save()` | Sim |
 | RF016 | `ItemServicoOSViewSet.iniciar()` (com `pecas`) | Sim |
-| RF017 | `MetricasItemServicoSerializer` | Sim |
+| RF017 | `MetricasItemServicoSerializer` + `OrdemServicoViewSet.tempo_medio_servicos()` | Sim |

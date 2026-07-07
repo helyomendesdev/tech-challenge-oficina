@@ -83,6 +83,7 @@ Legenda: "Parcial" significa que a rota funciona, mas ainda depende de regra leg
 | POST | `/api/v1/ordens-servico/{id}/entregar/` | JWT | `OrdemServicoViewSet` | Model legado + policy | Sim | Sim, `ValidationError` vira 400 | Sim |
 | POST | `/api/v1/ordens-servico/{id}/cancelar/` | JWT | `OrdemServicoViewSet` | Model legado + policy | Sim | Sim, `ValidationError` vira 400 | Sim |
 | GET | `/api/v1/ordens-servico/{id}/metricas/` | JWT | `OrdemServicoViewSet.metricas` | Nao | Sim | Sim para parametro invalido/404 | Sim |
+| GET | `/api/v1/ordens-servico/metricas/tempo-medio/` | JWT | `OrdemServicoViewSet.tempo_medio_servicos` | Nao | Sim por `OrdemServico.created_by`; staff ve todas | Somente execucoes concluidas com duracao valida | Sim |
 | GET | `/api/v1/itens-pecas/` | JWT | `atendimento.views.ItemPecaOSViewSet` | Nao | Sim por `created_by`; nao por OS | Sim via DRF | Nao direto |
 | POST | `/api/v1/itens-pecas/` | JWT | `ItemPecaOSViewSet` + `ItemPecaOSSerializer` | Nao | Parcial: `os` e `peca` informados nao sao escopados | Parcial: serializer cobre estoque comum; model save pode gerar erro fora do handler | Sim |
 | GET | `/api/v1/itens-pecas/{id}/` | JWT | `ItemPecaOSViewSet` | Nao | Sim por `created_by` | Sim, 404 tratado | Nao direto |
@@ -155,7 +156,7 @@ Legenda: "Parcial" significa que a rota funciona, mas ainda depende de regra leg
 | Status RECEBIDA, DIAGNOSTICO, AGUARDANDO, EXECUCAO, FINALIZADA, ENTREGUE | Atendido; existe tambem CANCELADA |
 | Alteracao de status conforme acoes | Atendido em actions legadas e notificacao |
 | Consulta publica por placa ou CPF/CNPJ | Atendido |
-| Monitoramento de tempo medio/execucao | Atendido por endpoint de metricas por OS/servico |
+| Monitoramento de tempo medio/execucao | Atendido pelos endpoints de metricas por OS e de media agrupada por tipo de servico |
 | Autenticacao JWT administrativa | Atendido via config global DRF e SimpleJWT |
 | Validacao de CPF/CNPJ | Atendido |
 | Validacao de placa | Atendido |

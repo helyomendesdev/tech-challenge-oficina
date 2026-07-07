@@ -529,6 +529,12 @@ Copie `.env.example` para `.env` e preencha os valores antes de iniciar a aplica
 |---|---|---|---|
 | `GET` | `/api/v1/ordens-servico/{os_id}/metricas/` | Tempo de execução e peças consumidas por serviço da OS | Sim |
 | `GET` | `/api/v1/ordens-servico/{os_id}/metricas/?servico={id}` | Filtrar métricas por serviço específico | Sim |
+| `GET` | `/api/v1/ordens-servico/metricas/tempo-medio/` | Média de execução, em minutos, agrupada por tipo de serviço | Sim |
+
+O tempo médio considera somente itens com status `CONCLUIDO`, início e
+finalização preenchidos e duração não negativa. Tipos de serviço sem nenhuma
+execução válida não são retornados. Usuários comuns visualizam somente dados
+de suas próprias ordens; usuários staff mantêm a visão administrativa global.
 
 ---
 
