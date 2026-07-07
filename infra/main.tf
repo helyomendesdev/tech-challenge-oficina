@@ -22,5 +22,6 @@ provider "kubernetes" {
 }
 
 resource "kind_cluster" "oficina" {
-  name = var.cluster_name
+  name           = var.cluster_name
+  wait_for_ready = true
 }

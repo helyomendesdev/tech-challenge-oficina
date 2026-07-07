@@ -38,6 +38,7 @@ resource "kubernetes_config_map" "oficina" {
     DJANGO_SETTINGS_MODULE = "app.settings"
     DB_HOST                = kubernetes_service.postgres.metadata[0].name
     DB_PORT                = "5432"
+    SECURE_SSL_REDIRECT    = "False"
     DJANGO_LOG_FILE        = "/tmp/oficina_atividades.log"
     STATIC_ROOT            = "/app/staticfiles"
   }
@@ -101,10 +102,18 @@ resource "kubernetes_stateful_set" "postgres" {
 
           liveness_probe {
             exec {
-              command = ["pg_isready", "-U", "postgres"]
+              command = ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
             }
             initial_delay_seconds = 15
             period_seconds        = 10
+          }
+
+          readiness_probe {
+            exec {
+              command = ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            }
+            initial_delay_seconds = 5
+            period_seconds        = 5
           }
         }
       }
@@ -150,7 +159,68 @@ resource "kubernetes_service" "postgres" {
   }
 }
 
-# ── App Deployment ────────────────────────────────────────────────────────────
+# ── Migrations ────────────────────────────────────────────────────────────────
+
+resource "kubernetes_job_v1" "migrate" {
+  metadata {
+    name      = "oficina-migrate"
+    namespace = kubernetes_namespace.oficina.metadata[0].name
+  }
+
+  spec {
+    backoff_limit              = 3
+    ttl_seconds_after_finished = 300
+
+    template {
+      metadata {
+        labels = {
+          app = "oficina-migrate"
+        }
+      }
+
+      spec {
+        restart_policy = "Never"
+
+        container {
+          name              = "migrate"
+          image             = var.app_image
+          image_pull_policy = "IfNotPresent"
+          command = [
+            "sh",
+            "-c",
+            "until python -c \"import socket; s=socket.create_connection(('oficina-db', 5432), timeout=2); s.close()\"; do sleep 3; done; python manage.py migrate --noinput",
+          ]
+
+          env_from {
+            config_map_ref {
+              name = kubernetes_config_map.oficina.metadata[0].name
+            }
+          }
+
+          env_from {
+            secret_ref {
+              name = kubernetes_secret.oficina.metadata[0].name
+            }
+          }
+        }
+      }
+    }
+  }
+
+  wait_for_completion = true
+
+  timeouts {
+    create = "5m"
+    update = "5m"
+  }
+
+  depends_on = [
+    kubernetes_stateful_set.postgres,
+    kubernetes_service.postgres,
+  ]
+}
+
+# ── App Deployment ───────────────────────────────────────────────────────────
 
 resource "kubernetes_deployment" "oficina_app" {
   metadata {
@@ -209,7 +279,7 @@ resource "kubernetes_deployment" "oficina_app" {
 
           resources {
             requests = {
-              cpu    = "250m"
+              cpu    = "100m"
               memory = "256Mi"
             }
             limits = {
@@ -219,28 +289,31 @@ resource "kubernetes_deployment" "oficina_app" {
           }
 
           liveness_probe {
-            tcp_socket {
-              port = "8000"
+            http_get {
+              path = "/health/live/"
+              port = 8000
             }
             initial_delay_seconds = 10
             period_seconds        = 20
           }
 
           readiness_probe {
-            tcp_socket {
-              port = "8000"
+            http_get {
+              path = "/health/ready/"
+              port = 8000
             }
             initial_delay_seconds = 5
             period_seconds        = 10
           }
 
           startup_probe {
-            tcp_socket {
-              port = "8000"
+            http_get {
+              path = "/health/live/"
+              port = 8000
             }
             initial_delay_seconds = 3
             period_seconds        = 10
-            failure_threshold     = 20
+            failure_threshold     = 30
           }
         }
       }
@@ -252,8 +325,7 @@ resource "kubernetes_deployment" "oficina_app" {
   }
 
   depends_on = [
-    kubernetes_stateful_set.postgres,
-    kubernetes_service.postgres,
+    kubernetes_job_v1.migrate,
   ]
 }
 
@@ -295,7 +367,37 @@ resource "kubernetes_horizontal_pod_autoscaler_v2" "oficina_app" {
     }
 
     min_replicas = 2
-    max_replicas = 10
+    max_replicas = 6
+
+    behavior {
+      scale_up {
+        stabilization_window_seconds = 0
+        select_policy                = "Max"
+
+        policy {
+          type           = "Pods"
+          value          = 2
+          period_seconds = 15
+        }
+
+        policy {
+          type           = "Percent"
+          value          = 100
+          period_seconds = 15
+        }
+      }
+
+      scale_down {
+        stabilization_window_seconds = 60
+        select_policy                = "Max"
+
+        policy {
+          type           = "Percent"
+          value          = 50
+          period_seconds = 15
+        }
+      }
+    }
 
     metric {
       type = "Resource"
@@ -305,7 +407,7 @@ resource "kubernetes_horizontal_pod_autoscaler_v2" "oficina_app" {
 
         target {
           type                = "Utilization"
-          average_utilization = 70
+          average_utilization = 50
         }
       }
     }

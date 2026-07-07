@@ -26,11 +26,21 @@ variable "postgres_user" {
 variable "postgres_password" {
   type      = string
   sensitive = true
+
+  validation {
+    condition     = length(var.postgres_password) >= 16 && !strcontains(var.postgres_password, "CHANGE_ME")
+    error_message = "postgres_password deve ter ao menos 16 caracteres e nao pode conter CHANGE_ME."
+  }
 }
 
 variable "django_secret_key" {
   type      = string
   sensitive = true
+
+  validation {
+    condition     = length(var.django_secret_key) >= 32 && !strcontains(var.django_secret_key, "CHANGE_ME")
+    error_message = "django_secret_key deve ter ao menos 32 caracteres e nao pode conter CHANGE_ME."
+  }
 }
 
 variable "django_debug" {
