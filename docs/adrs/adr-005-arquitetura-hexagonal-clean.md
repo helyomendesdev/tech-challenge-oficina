@@ -37,7 +37,7 @@
 - `atendimento/models.py` permanece por compatibilidade com migrations, admin, serializers antigos, endpoints da Fase 1 e testes existentes.
 - Regras legadas permanecem temporariamente em `models.py`, `signals.py`, ModelSerializers antigos e ViewSets antigos.
 - Essa permanência é uma decisão consciente de refatoração incremental, não uma falha da arquitetura.
-- Validação final: 194 testes passando, 3 subtests passando, 94% de cobertura total e schema OpenAPI com 0 erros e 2 warnings não bloqueantes de enum `status`.
+- Validação final: 210 testes passando, 3 subtests passando, 94,52% de cobertura total e schema OpenAPI validado sem erros.
 
 ## 3. Consequências Positivas
 

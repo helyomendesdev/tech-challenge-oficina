@@ -66,11 +66,11 @@ Continuam atendidos:
 
 A validacao final registrou:
 
-- 194 testes passando;
+- 210 testes passando;
 - 3 subtests passando;
-- 94% de cobertura documentada como baseline final da entrega;
+- 94,52% de cobertura documentada como baseline final da entrega;
 - OpenAPI com 0 erros;
-- 2 warnings nao bloqueantes de enum `status` no drf-spectacular.
+- schema OpenAPI validado sem erros pelo drf-spectacular.
 
 Os warnings de enum sao conhecidos e nao impedem a geracao do schema. Eles
 podem ser refinados futuramente com `ENUM_NAME_OVERRIDES`.

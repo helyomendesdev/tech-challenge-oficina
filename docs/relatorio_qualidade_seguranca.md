@@ -17,15 +17,15 @@
 | Vulnerabilidades | **0** | A | ✅ |
 | Code Smells | **0** | A | ✅ |
 | Security Hotspots | **2** | — | ⚠️ Revisados¹ |
-| Cobertura de testes | **94 %** | — | ✅ (meta ≥ 80 %) |
+| Cobertura de testes | **94,52 %** | — | ✅ (meta ≥ 80 %) |
 | Duplicação de código | **0,0 %** | — | ✅ |
 | Linhas analisadas (NCLOC) | **3.149** | — | — |
 | Dívida técnica | **0 min** | A | ✅ |
 | Debt Ratio | **0,0 %** | — | ✅ |
 | Reliability Rating | **A** | — | ✅ |
 | Security Rating | **A** | — | ✅ |
-| Testes executados | **194 / 194 passando + 3 subtests** | — | ✅ |
-| Schema OpenAPI | **0 erros** | 2 warnings de enum `status` não bloqueantes | ✅ |
+| Testes executados | **210 / 210 passando + 3 subtests** | — | ✅ |
+| Schema OpenAPI | **34 caminhos / 60 operações** | Validação sem erros | ✅ |
 
 > ¹ Os 2 Security Hotspots exigem revisão manual no painel do SonarQube. Não são vulnerabilidades confirmadas — são candidatos para avaliação de contexto.
 
@@ -81,7 +81,7 @@ As ocorrências V-01, V-02, V-03 e CS-03 foram marcadas com `# NOSONAR` porque:
 
 ## 3 · Qualidade de Código
 
-### 3.1 Cobertura de Testes (`pytest-cov` — 94 %)
+### 3.1 Cobertura de Testes (`pytest-cov` — 94,52 %)
 
 | Módulo | Cobertura |
 |---|---|
@@ -90,7 +90,7 @@ As ocorrências V-01, V-02, V-03 e CS-03 foram marcadas com `# NOSONAR` porque:
 | `atendimento/serializers.py` | ~90 % |
 | `atendimento/models.py` | ~85 % |
 | `app/asgi.py`, `app/wsgi.py` | 0 % ⚠️ (entry points de servidor — aceitável) |
-| **TOTAL** | **94 %** ✅ |
+| **TOTAL** | **94,52 %** ✅ |
 
 ### 3.2 Duplicação de Código
 
@@ -299,7 +299,7 @@ A API Oficina Mecânica atingiu a classificação máxima em todas as métricas 
 - **0 vulnerabilidades** — Security Rating **A**
 - **0 code smells** — Maintainability Rating **A**, dívida técnica **0 min**
 - **0 % de duplicação** de código
-- **94 % de cobertura** com **194 testes passando** (meta de 80 % superada)
+- **94,52 % de cobertura** com **210 testes e 3 subtests passando** (meta de 80 % superada)
 
 Os controles críticos do OWASP Top 10 estão implementados: autenticação JWT com isolamento por usuário, validação de entrada, sem SQL injection, segredos em variáveis de ambiente, headers HTTP de segurança em produção, máquina de estados para transições de OS e controle atômico de estoque via operações `F()`.
 

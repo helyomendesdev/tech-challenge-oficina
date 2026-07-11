@@ -131,8 +131,8 @@ POST /api/v1/ordens-servico/abrir/
 ## 8. Validação Atual
 
 - `python manage.py check --settings=app.settings_test`: sem issues.
-- `python manage.py spectacular --settings=app.settings_test --file schema.yml --validate`: 0 erros; 2 warnings não bloqueantes de enum `status`.
-- `python -m pytest --cov=atendimento --cov-report=term-missing`: 194 testes passando, 3 subtests passando, 94% de cobertura.
+- `python manage.py spectacular --settings=app.settings_test --file schema.yml --validate`: schema validado sem erros.
+- `pytest --cov=atendimento --cov-report=term-missing --cov-fail-under=80`: 210 testes passando, 3 subtests passando, 94,52% de cobertura.
 
 ## 9. Próximas Evoluções Possíveis
 

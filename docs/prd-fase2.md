@@ -65,7 +65,7 @@ visando:
 | Validacao CPF/CNPJ/Placa | Implementada via validate_docbr |
 | Dockerfile | Existente (python:3.11-slim + gunicorn) |
 | docker-compose.yml | Existente (postgres + web) |
-| Testes (194) | 194 testes passando, 78% cobertura |
+| Testes | 210 testes passando, 3 subtests e 94,52% de cobertura |
 | Postman Collection | Existente (`postman_collection.json`) |
 | Documentacao DDD | Event Storming, C4 Model, ADRs, RFCs, HLD, LLD |
 
@@ -120,7 +120,7 @@ Pipeline obrigatoria deve executar em ordem:
 | Passo | Descricao | Criterio de Aceite |
 |-------|-----------|-------------------|
 | 1. Build da aplicacao | `pip install -r requirements.txt` + `python manage.py check` | Sem erros de compilacao/dependencias |
-| 2. Execucao dos testes automatizados | `pytest atendimento/tests/ -v --tb=short` | 194+ testes passando |
+| 2. Execucao dos testes automatizados | `pytest atendimento/tests/ -v --tb=short` | 210 testes e 3 subtests passando |
 | 3. Build da imagem Docker | `docker build -t app .` | Imagem criada sem erros |
 | 4. Deploy no cluster Kubernetes | `kubectl apply -f k8s/` | Todos os recursos criados no namespace `oficina` |
 | 5. Deploy do banco de dados | `kubectl apply -f k8s/postgres-*` | StatefulSet + Service do PostgreSQL criados |
@@ -173,7 +173,7 @@ Requisito oficial: "Alterar/criar as seguintes APIs"
                     v                 v
                 CI (rapido)       CD (completo)
               - Build app        - Build app
-              - Testes (194)     - Testes (194)
+              - Testes (210)     - Testes (210)
               - Lint             - Build imagem Docker
                                  - Push para GHCR
                                  - kubectl apply -f k8s/
@@ -227,7 +227,7 @@ Namespace: oficina
 
 ## 7. Criterios de aceite gerais
 
-1. **Testes:** 194+ testes existentes continuam passando apos todas as alteracoes
+1. **Testes:** 210 testes e 3 subtests continuam passando apos todas as alteracoes
 2. **Docker:** `docker-compose up` sobe app + banco sem erros
 3. **K8s:** `kubectl apply -f k8s/` cria todos os recursos. `kubectl get pods` mostra pods Running
 4. **Terraform:** `terraform apply` provisiona o ambiente sem erros
