@@ -8,8 +8,8 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?style=flat&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-kind-326CE5?style=flat&logo=kubernetes&logoColor=white)
-![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-2-oficina/ci.yml?branch=main&label=CI&logo=github)
-![CD](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-2-oficina/cd.yml?branch=main&label=CD&logo=github)
+![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-oficina/ci.yml?branch=main&label=CI&logo=github)
+![CD](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-oficina/cd.yml?branch=main&label=CD&logo=github)
 ![Cobertura](https://img.shields.io/badge/Cobertura-94.52%25-brightgreen?style=flat)
 ![Testes](https://img.shields.io/badge/Testes-210%20passando-brightgreen?style=flat)
 
@@ -272,8 +272,8 @@ Cluster kind pronto — kubectl port-forward → http://localhost:8000
 
 ```bash
 # 1. Clone o repositório
-git clone https://github.com/helyomendesdev/tech-challenge-fase-1-2-oficina.git
-cd tech-challenge-fase-1-oficina
+git clone https://github.com/helyomendesdev/tech-challenge-oficina.git
+cd tech-challenge-oficina
 
 # 2. Configure as variáveis de ambiente
 cp .env.example .env
@@ -383,8 +383,8 @@ Os arquivos dos workflows foram validados contra os scripts locais. Pipeline
 verde é evidência externa e deve ser confirmado no GitHub antes da entrega.
 
 Badges de status:
-[![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-2-oficina/ci.yml?branch=main&label=CI&logo=github)](https://github.com/helyomendesdev/tech-challenge-fase-1-2-oficina/actions/workflows/ci.yml)
-[![CD](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-2-oficina/cd.yml?branch=main&label=CD&logo=github)](https://github.com/helyomendesdev/tech-challenge-fase-1-2-oficina/actions/workflows/cd.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-oficina/ci.yml?branch=main&label=CI&logo=github)](https://github.com/helyomendesdev/tech-challenge-oficina/actions/workflows/ci.yml)
+[![CD](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-oficina/cd.yml?branch=main&label=CD&logo=github)](https://github.com/helyomendesdev/tech-challenge-oficina/actions/workflows/cd.yml)
 
 ### Sem Docker (desenvolvimento local)
 
@@ -821,7 +821,7 @@ O repositório inclui uma collection e um environment Postman prontos para uso:
 ## Estrutura do Projeto
 
 ```
-tech-challenge-fase-1-oficina/
+tech-challenge-oficina/
 ├── app/                         # Configuração Django
 │   ├── settings.py              # Configurações de produção (via .env)
 │   ├── settings_test.py         # Configurações de teste (SQLite em memória)

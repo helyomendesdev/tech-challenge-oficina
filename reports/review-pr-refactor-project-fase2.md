@@ -2,7 +2,7 @@
 
 **Data:** 2026-06-09
 **Branch:** `refactor-project-correto` (commit `cafaf8e`)
-**Repositorio:** helyomendesdev/tech-challenge-fase-1-oficina
+**Repositorio:** helyomendesdev/tech-challenge-oficina
 **Projeto:** FIAP Tech Challenge - Oficina (Fase 2)
 
 ---
