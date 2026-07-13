@@ -40,6 +40,8 @@ Thumbs.db
 # Security / analysis generated files
 .hermes/
 .claude-flow/
+docs/roteiro-video-fase2.md
+docs/roteiro-fala-fase2.md
 relatorio_vulnerabilidades.txt
 seguranca_atendimento.txt
 seguranca_settings.txt
