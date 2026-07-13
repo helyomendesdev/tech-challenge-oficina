@@ -128,7 +128,10 @@ USE_TZ = True
 # ---------------------------------------------------------------------------
 
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'  # M11: necessário para collectstatic em produção
+STATIC_ROOT = config(
+    'STATIC_ROOT',
+    default=str(BASE_DIR / 'staticfiles'),
+)  # M11: necessário para collectstatic em produção
 
 # ---------------------------------------------------------------------------
 # Auto field padrão
@@ -192,6 +195,10 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'Sistema de gestão de Ordens de Serviço e estoque.',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'ENUM_NAME_OVERRIDES': {
+        'StatusOrdemServicoEnum': 'atendimento.models.OrdemServico.STATUS_CHOICES',
+        'StatusItemServicoEnum': 'atendimento.models.ItemServicoOS.STATUS_CHOICES',
+    },
 }
 
 # ---------------------------------------------------------------------------

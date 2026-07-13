@@ -695,7 +695,7 @@ O sumário do README já contém um link "Com Kubernetes (kind)". Adicionar logo
 - [ ] **Step 1: Construir a imagem Docker**
 
 ```bash
-cd C:\Projetos\tech-challenge-fase-1-oficina
+cd C:\Projetos\tech-challenge-oficina
 docker build -t oficina-app:latest .
 ```
 

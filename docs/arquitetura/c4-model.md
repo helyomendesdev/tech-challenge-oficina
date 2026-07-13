@@ -355,5 +355,5 @@ Após gerar as imagens, salve-as em `docs/images/` com os nomes:
 
 E referencie no documento com:
 ```markdown
-![Descrição](caminho/para/imagem.png)
+![Diagrama de contexto](../images/1%20-%20C4Context.png)
 ```

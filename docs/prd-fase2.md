@@ -65,7 +65,7 @@ visando:
 | Validacao CPF/CNPJ/Placa | Implementada via validate_docbr |
 | Dockerfile | Existente (python:3.11-slim + gunicorn) |
 | docker-compose.yml | Existente (postgres + web) |
-| Testes (194) | 194 testes passando, 78% cobertura |
+| Testes | 210 testes passando, 3 subtests e 94,52% de cobertura |
 | Postman Collection | Existente (`postman_collection.json`) |
 | Documentacao DDD | Event Storming, C4 Model, ADRs, RFCs, HLD, LLD |
 
@@ -97,10 +97,10 @@ atendimento/
 |----------|-----------|-------------------|
 | `k8s/namespace.yaml` | Namespace dedicado `oficina` | `kubectl apply -f` cria o namespace |
 | `k8s/configmap.yaml` | Variaveis nao sensiveis (DEBUG=False, DJANGO_SETTINGS_MODULE) | Pod enxerga via env var |
-| `k8s/secret.yaml` | Credenciais (DB password, SECRET_KEY, tokens) | Criado via `kubectl apply -f` ou `kubectl create secret` |
+| Secret `oficina-secret` | Credenciais (DB password e SECRET_KEY) | Gerado dinamicamente pelos scripts via `kubectl create secret`; não versionado |
 | `k8s/deployment.yaml` | Deployment da app (2+ replicas, probes, resource limits) | Rolling update sem downtime |
 | `k8s/service.yaml` | Service ClusterIP para comunicacao interna | `kubectl get svc` lista o servico |
-| `k8s/hpa.yaml` | HPA escalando de 2 a 10 pods por CPU > 70% | `kubectl get hpa` mostra metricas |
+| `k8s/hpa.yaml` | HPA escalando de 2 a 6 pods por CPU > 50% | `kubectl get hpa` mostra métricas numéricas e o teste comprova scale-up/down |
 | `k8s/postgres-statefulset.yaml` | StatefulSet do PostgreSQL com PersistentVolume | Dados persistem apos restart do pod |
 | `k8s/postgres-service.yaml` | Service para o banco | App conecta via nome do servico |
 
@@ -120,7 +120,7 @@ Pipeline obrigatoria deve executar em ordem:
 | Passo | Descricao | Criterio de Aceite |
 |-------|-----------|-------------------|
 | 1. Build da aplicacao | `pip install -r requirements.txt` + `python manage.py check` | Sem erros de compilacao/dependencias |
-| 2. Execucao dos testes automatizados | `pytest atendimento/tests/ -v --tb=short` | 194+ testes passando |
+| 2. Execucao dos testes automatizados | `pytest atendimento/tests/ -v --tb=short` | 210 testes e 3 subtests passando |
 | 3. Build da imagem Docker | `docker build -t app .` | Imagem criada sem erros |
 | 4. Deploy no cluster Kubernetes | `kubectl apply -f k8s/` | Todos os recursos criados no namespace `oficina` |
 | 5. Deploy do banco de dados | `kubectl apply -f k8s/postgres-*` | StatefulSet + Service do PostgreSQL criados |
@@ -173,7 +173,7 @@ Requisito oficial: "Alterar/criar as seguintes APIs"
                     v                 v
                 CI (rapido)       CD (completo)
               - Build app        - Build app
-              - Testes (194)     - Testes (194)
+              - Testes (210)     - Testes (210)
               - Lint             - Build imagem Docker
                                  - Push para GHCR
                                  - kubectl apply -f k8s/
@@ -184,14 +184,14 @@ Requisito oficial: "Alterar/criar as seguintes APIs"
                               v                 v
                          [Deployment]     [StatefulSet]
                          oficina-app      postgres
-                         2-10 pods        1 pod + PVC
+                         2-6 pods         1 pod + PVC
                               |                 |
                               v                 v
                          [Service]         [Service]
                          ClusterIP:8000    Headless:5432
                               |
                               v
-                         [HPA: CPU>70%]
+                         [HPA: CPU>50%]
                          (escala 2->10)
 ```
 
@@ -199,7 +199,7 @@ Requisito oficial: "Alterar/criar as seguintes APIs"
 
 ```
 Namespace: oficina
-├── Deployment: oficina-app (2-10 replicas)
+├── Deployment: oficina-app (2-6 réplicas)
 │   ├── LivenessProbe: HTTP GET /
 │   ├── ReadinessProbe: HTTP GET /
 │   ├── StartupProbe: HTTP GET / (failureThreshold: 30)
@@ -207,7 +207,7 @@ Namespace: oficina
 │   ├── Secret: credenciais
 │   └── Resource: requests 250m/256Mi, limits 500m/512Mi
 ├── Service: oficina-app (ClusterIP:8000)
-├── HPA: CPU > 70% (min 2, max 10)
+├── HPA: CPU > 50% (min 2, max 6)
 ├── StatefulSet: postgres (1 replica)
 │   ├── PVC: 1Gi (ReadWriteOnce)
 │   └── LivenessProbe: pg_isready
@@ -227,7 +227,7 @@ Namespace: oficina
 
 ## 7. Criterios de aceite gerais
 
-1. **Testes:** 194+ testes existentes continuam passando apos todas as alteracoes
+1. **Testes:** 210 testes e 3 subtests continuam passando apos todas as alteracoes
 2. **Docker:** `docker-compose up` sobe app + banco sem erros
 3. **K8s:** `kubectl apply -f k8s/` cria todos os recursos. `kubectl get pods` mostra pods Running
 4. **Terraform:** `terraform apply` provisiona o ambiente sem erros

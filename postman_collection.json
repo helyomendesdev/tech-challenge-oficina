@@ -2714,6 +2714,40 @@
           }
         }
       ]
+    },
+    {
+      "name": "Tempo medio por tipo de servico",
+      "description": "Media calculada apenas com execucoes CONCLUIDO que tenham inicio, finalizacao e duracao nao negativa. Servicos sem execucoes validas sao omitidos.",
+      "item": [
+        {
+          "name": "Listar tempo medio por servico",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/ordens-servico/metricas/tempo-medio/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "ordens-servico",
+                "metricas",
+                "tempo-medio",
+                ""
+              ]
+            },
+            "description": "Retorna servico_id, descricao, quantidade_execucoes e tempo_medio_minutos, respeitando o isolamento por usuario."
+          }
+        }
+      ]
     }
   ]
 }

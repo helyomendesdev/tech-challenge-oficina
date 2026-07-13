@@ -8,10 +8,10 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15-336791?style=flat&logo=postgresql&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat&logo=docker&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-kind-326CE5?style=flat&logo=kubernetes&logoColor=white)
-![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-oficina/ci.yml?branch=main&label=CI&logo=github)
-![CD](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-oficina/cd.yml?branch=main&label=CD&logo=github)
-![Cobertura](https://img.shields.io/badge/Cobertura-78%25-brightgreen?style=flat)
-![Testes](https://img.shields.io/badge/Testes-194%20passando-brightgreen?style=flat)
+![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-oficina/ci.yml?branch=main&label=CI&logo=github)
+![CD](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-oficina/cd.yml?branch=main&label=CD&logo=github)
+![Cobertura](https://img.shields.io/badge/Cobertura-94.52%25-brightgreen?style=flat)
+![Testes](https://img.shields.io/badge/Testes-210%20passando-brightgreen?style=flat)
 
 ---
 
@@ -36,6 +36,7 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 - [Testes](#testes)
 - [Estrutura do Projeto](#estrutura-do-projeto)
 - [Qualidade e Segurança](#qualidade-e-segurança)
+- [Limitações conhecidas](#limitações-conhecidas)
 - [Documentação de Entrega](#documentação-de-entrega)
 - [Equipe](#equipe)
 
@@ -56,8 +57,15 @@ com evolucao para infraestrutura escalavel na Fase 2:
 - **Cálculo automático do valor total** da OS (serviços + peças)
 - Endpoint **público** para o cliente consultar o status da OS pela placa ou CPF/CNPJ
 - **Métricas de serviço** por OS: tempo de execução, peças consumidas, filtro por serviço
-- **Filtros avançados** por status, data, valor, nome e estoque em todos os endpoints
+- **Tempo médio por tipo de serviço**, considerando somente execuções concluídas válidas
+- **Filtros e ordenação** nos recursos administrativos que expõem FilterSets
 - **Rate limiting** global e específico por endpoint
+
+### Fase 1 — Base funcional
+
+A Fase 1 estabelece o domínio da oficina: clientes, veículos, catálogo de
+serviços e peças, estoque, ordens de serviço, orçamento, máquina de estados,
+JWT, consulta pública, documentação e testes automatizados.
 
 ### Fase 2 — Evolução da aplicação
 
@@ -66,9 +74,9 @@ A Fase 2 evolui o sistema com foco em qualidade, resiliência e escalabilidade:
 - **Refatoração arquitetural**: Clean Architecture/Hexagonal pragmática com separação de camadas (`domain`, `application`, `infrastructure`, `interfaces`)
 - **APIs revisadas**: abertura unificada de OS, consulta de status com isolamento por usuário, fila operacional ordenada, aprovação externa de orçamento e atualização de status via notificações
 - **Conteinerização**: Dockerfile e docker-compose revisados para desenvolvimento local
-- **Orquestração K8s**: manifestos para Deployment, Service, ConfigMap, Secret, StatefulSet (PostgreSQL) e HPA (2-10 pods, CPU 70%)
+- **Orquestração K8s**: manifests para Deployment, Services, ConfigMap, StatefulSet, Secret dinâmico, Metrics Server e HPA de 2–6 pods com alvo de CPU em 50%
 - **Infraestrutura como Código**: Terraform provisiona cluster kind e aplica todos os recursos K8s
-- **CI/CD**: GitHub Actions com pipeline de CI (build + 194 testes) e CD (build + testes + Docker + deploy K8s em kind)
+- **CI/CD**: workflows GitHub Actions versionados para CI e deploy efêmero em Kind; o status da execução remota deve ser conferido no GitHub antes da entrega
 
 ---
 
@@ -210,7 +218,7 @@ RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE
 │  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐              │
 │  │  ConfigMap   │   │   Secret     │   │     HPA       │              │
 │  │ oficina-cfg  │   │ oficina-sec  │   │  2 → 10 pods  │              │
-│  │ (env vars)   │   │ (credenciais)│   │  CPU > 70%    │              │
+│  │ (env vars)   │   │ (credenciais)│   │  CPU > 50%    │              │
 │  └──────────────┘   └──────────────┘   └───────────────┘              │
 │                                                                        │
 │  ┌───────────────────────┐      ┌───────────────────────┐             │
@@ -218,7 +226,7 @@ RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE
 │  │  oficina-app          │      │  postgres             │             │
 │  │  2 réplicas           │      │  1 réplica            │             │
 │  │  gunicorn :8000       │      │  postgres:15          │             │
-│  │  probes tcp/8000      │      │  PVC 1Gi              │             │
+│  │  probes HTTP health   │      │  PVC 1Gi              │             │
 │  │  limits 500m/512Mi    │      │  limits 500m/512Mi    │             │
 │  └──────────┬────────────┘      └──────────┬────────────┘             │
 │             │ :8000                         │ :5432                    │
@@ -235,15 +243,15 @@ RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE
 Push/PR ──► CI (ci.yml)
              │ 1. Build (pip install)
              │ 2. Django check
-             │ 3. 194 testes (pytest-django)
+             │ 3. 210 testes (pytest-django)
              ▼
 Merge main ──► CD (cd.yml)
              │ 1. Build + testes
              │ 2. Docker build (oficina-app:latest)
              │ 3. Cluster kind efêmero
-             │ 4. Dry-run manifests K8s
-             │ 5. Deploy no cluster
-             │ 6. Aplicar manifestos YAML
+             │ 4. Deploy da aplicação, banco e Metrics Server
+             │ 5. Migrations + smoke test autenticado
+             │ 6. Métricas do HPA; carga completa no gatilho manual
              ▼
 Cluster kind pronto — kubectl port-forward → http://localhost:8000
 ```
@@ -264,15 +272,15 @@ Cluster kind pronto — kubectl port-forward → http://localhost:8000
 
 ```bash
 # 1. Clone o repositório
-git clone <url-do-repositorio>
-cd tech-challenge-fase-1-oficina
+git clone https://github.com/helyomendesdev/tech-challenge-oficina.git
+cd tech-challenge-oficina
 
 # 2. Configure as variáveis de ambiente
 cp .env.example .env
 # Edite o .env com suas credenciais e uma SECRET_KEY segura
 
 # 3. Suba os containers (banco + API)
-docker-compose up --build
+docker compose up --build
 
 # 4. Em outro terminal, crie o superusuário
 docker exec -it oficina_app python manage.py createsuperuser
@@ -286,55 +294,79 @@ A API estará disponível em `http://localhost:8000`.
 
 ### Com Kubernetes (kind)
 
-```bash
-# 1. Instale kind e kubectl
-brew install kind kubectl
+O deploy local cria ou reutiliza com segurança o cluster `oficina`, constrói e
+carrega a imagem, gera Secrets locais dinamicamente, executa migrations,
+instala o Metrics Server e aguarda todos os rollouts.
 
-# 2. Crie o cluster
-kind create cluster --name oficina
+**Windows PowerShell:**
 
-# 3. Aplique os manifests
-kubectl apply -f k8s/
-
-# 4. Aguarde os pods ficarem prontos
-kubectl wait --for=condition=ready pod -l app=postgres -n oficina --timeout=180s
-kubectl rollout status deployment/oficina-app -n oficina --timeout=180s
-
-# 5. Rode as migrations
-kubectl exec -n oficina deployment/oficina-app -- python manage.py migrate
-
-# 6. Acesse a API (em outro terminal)
-kubectl port-forward -n oficina svc/oficina-app 8000:8000
+```powershell
+.\scripts\kind-deploy.ps1
+python .\scripts\smoke_test.py
+python .\scripts\hpa_load_test.py
 ```
 
-> **Nota:** O `k8s/secret.yaml` contém placeholders (`CHANGE_ME_*`). Configure valores reais antes de usar em produção.
+**Linux / GitHub Actions:**
+
+```bash
+chmod +x scripts/kind-deploy.sh
+./scripts/kind-deploy.sh
+python scripts/smoke_test.py
+python scripts/hpa_load_test.py
+```
+
+O teste de HPA registra réplicas e CPU antes, durante e depois da carga, e
+falha se não observar tanto scale-up quanto scale-down. O CD executa deploy,
+smoke e validação das métricas em todo push; o teste completo de HPA fica no
+gatilho manual `workflow_dispatch` por levar alguns minutos.
+
+O repositório não contém um Secret aplicável. Os scripts criam
+`oficina-secret` com valores aleatórios ou variáveis de ambiente. Em cluster
+reutilizado, o Secret existente é preservado para manter compatibilidade com o
+volume persistente do PostgreSQL e o deploy falha se encontrar `CHANGE_ME_*`.
+
+Para inspecionar o ambiente manualmente:
+
+```bash
+kubectl get nodes
+kubectl get pods -A
+kubectl get pods,services,deployments,statefulsets,hpa -n oficina
+kubectl top nodes
+kubectl top pods -n oficina
+kubectl port-forward -n oficina svc/oficina-app 8000:8000
+```
 
 ### Com Terraform (IaC)
 
-Provisiona o cluster kind e aplica todos os recursos Kubernetes via Terraform. Consulte [`infra/README.md`](infra/README.md) para o guia completo.
+Provisiona o cluster Kind e os recursos Kubernetes via Terraform. Como a
+imagem precisa existir dentro do cluster antes do Deployment, o script
+`infra/deploy.ps1` explicita a ordem cluster → build → load → recursos →
+migrations → aplicação → Metrics Server → HPA → smoke. Consulte
+[`infra/README.md`](infra/README.md) para detalhes.
 
-```bash
-cd infra/
+```powershell
+cd infra
 
-# 1. Inicialize os providers
+# 1. Valide a configuração
+terraform fmt -check -recursive
 terraform init
+terraform validate
 
-# 2. Configure as variáveis sensíveis
-export TF_VAR_postgres_password="sua_senha"
-export TF_VAR_django_secret_key="sua_secret_key"
+# 2. Forneça segredos apenas no ambiente local
+$env:TF_VAR_postgres_password = python -c "import secrets; print(secrets.token_urlsafe(32))"
+$env:TF_VAR_django_secret_key = python -c "import secrets; print(secrets.token_urlsafe(48))"
 
-# 3. Aplique (cria cluster + todos os recursos K8s)
-terraform apply
+# 3. Revise o plano e execute o fluxo reproduzível
+terraform plan
+.\deploy.ps1
 
-# 4. Carregue a imagem no cluster kind
-docker build -t oficina-app:latest .. && kind load docker-image oficina-app:latest --name oficina
-
-# 5. Rode as migrations
-kubectl exec -n oficina deployment/oficina-app -- python manage.py migrate
-
-# 6. Acesse a API
-kubectl port-forward -n oficina svc/oficina-app 8000:8000
+# 4. Destrua após a demonstração
+terraform destroy
 ```
+
+Na última validação local registrada, o plano apresentou `10 to add`, o apply
+criou os dez recursos gerenciados e o destroy removeu os dez. Essa evidência
+local não substitui o status do workflow remoto.
 
 ---
 
@@ -344,15 +376,15 @@ O projeto utiliza **GitHub Actions** para integração e entrega contínuas:
 
 | Pipeline | Trigger | Etapas |
 |----------|---------|--------|
-| **CI** | push/PR em `main` ou `feat/*` | Build → Django check → 194 testes |
-| **CD** | merge em `main` | Build → testes → Docker image → dry-run K8s → deploy em kind |
+| **CI** | push/PR em `main` ou `feat/*` | Dependências → Django check → testes → Docker build → relatório JUnit |
+| **CD** | push em `main` ou manual | Checks → testes → Kind → deploy → migrations → smoke → Metrics/HPA |
 
-O CI é executado a cada push e valida a qualidade do código. O CD constrói a imagem Docker,
-cria um cluster kind, valida todos os manifests Kubernetes e aplica os recursos no cluster.
+Os arquivos dos workflows foram validados contra os scripts locais. Pipeline
+verde é evidência externa e deve ser confirmado no GitHub antes da entrega.
 
 Badges de status:
-[![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-oficina/ci.yml?branch=main&label=CI&logo=github)](https://github.com/helyomendesdev/tech-challenge-fase-1-oficina/actions/workflows/ci.yml)
-[![CD](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-fase-1-oficina/cd.yml?branch=main&label=CD&logo=github)](https://github.com/helyomendesdev/tech-challenge-fase-1-oficina/actions/workflows/cd.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-oficina/ci.yml?branch=main&label=CI&logo=github)](https://github.com/helyomendesdev/tech-challenge-oficina/actions/workflows/ci.yml)
+[![CD](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-oficina/cd.yml?branch=main&label=CD&logo=github)](https://github.com/helyomendesdev/tech-challenge-oficina/actions/workflows/cd.yml)
 
 ### Sem Docker (desenvolvimento local)
 
@@ -399,6 +431,9 @@ Copie `.env.example` para `.env` e preencha os valores antes de iniciar a aplica
 ---
 
 ## Endpoints da API
+
+O schema validado contém **34 caminhos e 60 operações OpenAPI**. Swagger e
+ReDoc são derivados desse mesmo schema, evitando uma contagem manual paralela.
 
 ### Documentação interativa
 
@@ -510,12 +545,20 @@ Copie `.env.example` para `.env` e preencha os valores antes de iniciar a aplica
 |---|---|---|---|
 | `GET` | `/api/v1/ordens-servico/{os_id}/metricas/` | Tempo de execução e peças consumidas por serviço da OS | Sim |
 | `GET` | `/api/v1/ordens-servico/{os_id}/metricas/?servico={id}` | Filtrar métricas por serviço específico | Sim |
+| `GET` | `/api/v1/ordens-servico/metricas/tempo-medio/` | Média de execução, em minutos, agrupada por tipo de serviço | Sim |
+
+O tempo médio considera somente itens com status `CONCLUIDO`, início e
+finalização preenchidos e duração não negativa. Tipos de serviço sem nenhuma
+execução válida não são retornados. Usuários comuns visualizam somente dados
+de suas próprias ordens; usuários staff mantêm a visão administrativa global.
 
 ---
 
 ## Filtros e Busca
 
-Todos os endpoints suportam **paginação** (20 itens/página por padrão).
+Os endpoints de listagem base usam **paginação** de 20 itens por padrão. Actions
+com resposta própria, como métricas e alguns fluxos da Fase 2, podem retornar
+listas não paginadas conforme seu contrato documentado no OpenAPI.
 
 ### Ordens de Serviço — `/api/v1/ordens-servico/`
 
@@ -552,7 +595,9 @@ Todos os endpoints suportam **paginação** (20 itens/página por padrão).
 
 ## Autenticação
 
-Todos os endpoints exigem autenticação via **Bearer Token (JWT)**, exceto a consulta pública de OS.
+Os endpoints administrativos exigem **Bearer Token (JWT)**. As exceções
+intencionais são healthchecks, schema/documentação, emissão/renovação de token
+e consulta pública de OS.
 
 **Obtendo o token:**
 
@@ -725,15 +770,15 @@ pytest --cov=atendimento --cov-report=xml:coverage.xml
 
 | Métrica | Valor |
 |---|---|
-| Total de testes | **194 passando** |
+| Total de testes | **210 passando** |
 | Subtests | **3 passando** |
-| Cobertura geral | **94 %** |
-| OpenAPI | **0 erros** · 2 warnings não bloqueantes de enum `status` |
-| SonarQube Bugs | **0** |
-| SonarQube Vulnerabilidades | **0** |
-| SonarQube Code Smells | **0** |
-| SonarQube Security Rating | **A** |
-| OWASP Top 10 | **9/10 conformantes** · 1/10 parcialmente |
+| Cobertura geral | **94,52%** |
+| OpenAPI | **34 caminhos · 60 operações · validação sem erros** |
+| SonarQube Bugs *(relatório histórico)* | **0** |
+| SonarQube Vulnerabilidades *(relatório histórico)* | **0** |
+| SonarQube Code Smells *(relatório histórico)* | **0** |
+| SonarQube Security Rating *(relatório histórico)* | **A** |
+| OWASP Top 10 *(avaliação histórica)* | **9/10 conformantes** · 1/10 parcialmente |
 
 Os testes cobrem:
 
@@ -761,7 +806,7 @@ O repositório inclui uma collection e um environment Postman prontos para uso:
 
 | Arquivo | Descrição |
 |---|---|
-| `postman_collection.json` | Todos os endpoints organizados por recurso, incluindo casos de erro |
+| `postman_collection.json` | **76 requests** organizados por recurso, incluindo casos de erro |
 | `postman_environment.json` | Variáveis de ambiente (base_url, credenciais, tokens) |
 
 **Passos:**
@@ -776,7 +821,7 @@ O repositório inclui uma collection e um environment Postman prontos para uso:
 ## Estrutura do Projeto
 
 ```
-tech-challenge-fase-1-oficina/
+tech-challenge-oficina/
 ├── app/                         # Configuração Django
 │   ├── settings.py              # Configurações de produção (via .env)
 │   ├── settings_test.py         # Configurações de teste (SQLite em memória)
@@ -792,9 +837,10 @@ tech-challenge-fase-1-oficina/
 │   ├── admin.py                 # Django Admin customizado
 │   ├── exceptions.py            # Handler de erros com formato estruturado
 │   ├── signals.py               # Signals legados limpos; estoque fica em ItemPecaOS
-│   ├── tests.py                 # Testes Fase 1: modelos, API, filtros, estoque, serviços e métricas
-│   ├── test_phase2_flows.py     # Testes Fase 2: use cases, endpoints novos, fila e notificações
-│   ├── test_domain.py           # Testes de value objects, policies e services de domínio
+│   ├── tests/
+│   │   ├── application/         # Testes dos use cases da Fase 2
+│   │   ├── domain/              # Policies, services e value objects
+│   │   └── integration/         # APIs, isolamento, saúde e métricas
 │   ├── domain/                  # DDD tático: enums, policies, VOs, exceptions e services puros
 │   ├── application/             # DTOs, ports e use cases sem dependência de HTTP/ORM
 │   ├── infrastructure/          # Repositories Django ORM, transactions e notificação fake
@@ -804,8 +850,14 @@ tech-challenge-fase-1-oficina/
 │       ├── initial_data.json    # Dado base (1 cliente, 1 veículo...)
 │       └── seed_data.json       # Dados de exemplo para desenvolvimento
 ├── docs/
-│   ├── images/                  # Diagramas e screenshots da API
-│   └── relatorio_qualidade_seguranca.md  # Relatório SAST (SonarQube) + OWASP Top 10
+│   ├── adrs/                    # Decisões arquiteturais
+│   ├── arquitetura/             # C4 e arquitetura híbrida
+│   ├── requisitos/              # Requisitos funcionais e não funcionais
+│   └── relatorio_qualidade_seguranca.md  # Relatório histórico SAST/OWASP
+├── k8s/                         # Manifests da aplicação e banco
+├── infra/                       # Terraform e orquestrador PowerShell
+├── scripts/                     # Deploy Kind, smoke e prova do HPA
+├── .github/workflows/           # CI e CD
 ├── docker-compose.yml           # PostgreSQL + Gunicorn (healthcheck incluído)
 ├── Dockerfile
 ├── requirements.txt
@@ -820,18 +872,21 @@ tech-challenge-fase-1-oficina/
 
 ## Qualidade e Segurança
 
-A aplicação passa por análise estática de segurança (SAST via **SonarQube Community**) e mapeamento contra o **OWASP Top 10 (2021)** a cada ciclo de desenvolvimento.
+O repositório preserva um relatório histórico de análise estática com
+**SonarQube Community** e mapeamento **OWASP Top 10 (2021)**. O SonarQube não
+foi reexecutado nesta revisão documental; portanto, esses resultados não devem
+ser confundidos com os checks locais atuais.
 
 | Dimensão | Resultado |
 |---|---|
-| Cobertura de testes | **94 %** (meta ≥ 80 %) |
-| Testes passando | **194 / 194 + 3 subtests** |
-| Schema OpenAPI | **0 erros** · 2 warnings não bloqueantes de enum `status` |
-| Bugs (SonarQube) | **0** — Rating A |
-| Vulnerabilidades (SonarQube) | **0** — Rating A |
-| Code Smells (SonarQube) | **0** — dívida técnica 0 min |
-| Duplicação de código | **0,0 %** |
-| OWASP Top 10 | **9/10 conformantes** · 1/10 parcialmente |
+| Cobertura de testes | **94,52%** (meta ≥ 80%) |
+| Testes passando | **210 / 210 + 3 subtests** |
+| Schema OpenAPI | **34 caminhos · 60 operações · validação sem erros** |
+| Bugs (relatório histórico SonarQube) | **0** — Rating A |
+| Vulnerabilidades (relatório histórico SonarQube) | **0** — Rating A |
+| Code Smells (relatório histórico SonarQube) | **0** — dívida técnica 0 min |
+| Duplicação (relatório histórico) | **0,0%** |
+| OWASP Top 10 (avaliação histórica) | **9/10 conformantes** · 1/10 parcialmente |
 
 📄 **[Ver relatório completo → docs/relatorio_qualidade_seguranca.md](docs/relatorio_qualidade_seguranca.md)**
 
@@ -840,6 +895,22 @@ O relatório detalha:
 - Avaliação de cada categoria OWASP Top 10
 - Métricas de cobertura por módulo
 - Code smells corrigidos e plano de remediação priorizado
+
+---
+
+## Limitações conhecidas
+
+- O deploy é local/efêmero em Kind; não há infraestrutura cloud, registry,
+  Ingress, TLS público ou domínio de produção.
+- O Metrics Server usa `--kubelet-insecure-tls`, aceitável apenas no Kind local.
+- Build/load da imagem e instalação do Metrics Server são etapas imperativas
+  nos orquestradores, embora a ordem esteja documentada.
+- A arquitetura é híbrida e incremental: models, signals, ModelSerializers e
+  ViewSets legados coexistem com use cases e ports da Fase 2.
+- Metas de performance, disponibilidade e throughput não possuem ensaio atual
+  comprovado; permanecem parciais na matriz de requisitos.
+- PR, compartilhamento com a organização, publicação da collection, vídeo e
+  PDF dependem de ações humanas listadas no checklist de entrega.
 
 ---
 
@@ -860,6 +931,14 @@ Com `DJANGO_DEBUG=False` no `.env`, as seguintes proteções são ativadas autom
 ## Documentação de Entrega
 
 A documentação completa do projeto está organizada na pasta `docs/`:
+
+### Entrega final da Fase 2
+
+| Documento | Descrição |
+|---|---|
+| [Matriz de requisitos](docs/matriz-requisitos-fase1-fase2.md) | Evidências, resultados e status das Fases 1 e 2 |
+| [Checklist de entrega](docs/checklist-entrega-fase2.md) | Ações técnicas e externas ainda necessárias |
+| [Roteiro do vídeo](docs/roteiro-video-fase2.md) | Demonstração de até 15 minutos, comandos e contingência do HPA |
 
 ### Arquitetura
 

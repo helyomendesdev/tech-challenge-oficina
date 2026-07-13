@@ -40,7 +40,6 @@ Thumbs.db
 # Security / analysis generated files
 .hermes/
 .claude-flow/
-docs/roteiro-video-fase2.md
 relatorio_vulnerabilidades.txt
 seguranca_atendimento.txt
 seguranca_settings.txt
@@ -52,6 +51,7 @@ seguranca_settings.txt
 *.tfstate.backup
 *.tfstate.lock.info
 infra/terraform.secret.tfvars
+infra/oficina-config
 infra/override.tf
 infra/override.tf.json
 infra/*_override.tf

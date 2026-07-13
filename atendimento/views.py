@@ -16,13 +16,14 @@ from .serializers import (
     IniciarServicoSerializer,
     FinalizarServicoSerializer,
     MetricasItemServicoSerializer,
+    TempoMedioServicoSerializer,
 )
 from .filters import OrdemServicoFilter, ClienteFilter, PecaFilter
 from .throttles import ConsultaClienteThrottle
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from django.db.models import Q
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Q
 import re
 from atendimento.application.dtos import (
     FinalizarServicoInputDTO,
@@ -286,6 +287,49 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
                     status=drf_status.HTTP_400_BAD_REQUEST,
                 )
         serializer = MetricasItemServicoSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    @extend_schema(
+        description=(
+            "Tempo medio de execucao por tipo de servico. Considera apenas "
+            "itens CONCLUIDO com inicio, finalizacao e duracao nao negativa. "
+            "Servicos sem execucoes validas nao sao retornados."
+        ),
+        responses={200: TempoMedioServicoSerializer(many=True)},
+    )
+    @action(
+        detail=False,
+        methods=['get'],
+        url_path='metricas/tempo-medio',
+        pagination_class=None,
+        filter_backends=[],
+    )
+    def tempo_medio_servicos(self, request):
+        itens = ItemServicoOS.objects.filter(
+            status=StatusItemServico.CONCLUIDO.value,
+            data_inicio__isnull=False,
+            data_finalizacao__isnull=False,
+            data_finalizacao__gte=F('data_inicio'),
+        )
+        user = request.user
+        if not (user.is_staff or user.is_superuser):
+            itens = itens.filter(ordem_servico__created_by=user)
+
+        duracao = ExpressionWrapper(
+            F('data_finalizacao') - F('data_inicio'),
+            output_field=DurationField(),
+        )
+        metricas = (
+            itens
+            .annotate(duracao_execucao=duracao)
+            .values('servico_id', 'servico__descricao')
+            .annotate(
+                quantidade_execucoes=Count('id'),
+                duracao_media=Avg('duracao_execucao'),
+            )
+            .order_by('servico_id')
+        )
+        serializer = TempoMedioServicoSerializer(metricas, many=True)
         return Response(serializer.data)
 
     @extend_schema(description="Inicia o diagnóstico da OS. Transição: RECEBIDA → DIAGNOSTICO.")

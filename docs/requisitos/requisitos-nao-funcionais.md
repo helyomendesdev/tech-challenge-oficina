@@ -78,7 +78,7 @@ Em produção (`DEBUG=False`), o sistema deve ativar:
 
 O sistema deve manter cobertura de testes automatizados de **no mínimo 80%**.
 
-**Métrica atual:** 94% (194 testes passando)
+**Métrica atual:** 94,52% (210 testes e 3 subtests passando)
 
 ### RNF009 — Código Limpo
 **Prioridade:** Média
@@ -132,7 +132,7 @@ A aplicação deve executar completamente via Docker Compose com um único coman
 | RNF005 | `throttles.py` + config DRF | Conforme |
 | RNF006 | SonarQube SAST + `pentest.py` | 9/10 conformes |
 | RNF007 | `settings.py` (modo produção) | Conforme |
-| RNF008 | `pytest` + `pytest-cov` | 94% — Conforme |
+| RNF008 | `pytest` + `pytest-cov` | 94,52% — Conforme |
 | RNF009 | SonarQube Community 26.4 | Rating A — Conforme |
 | RNF010 | `drf-spectacular` + Swagger UI | Conforme |
 | RNF011 | `exceptions.py` + handler DRF | Conforme |

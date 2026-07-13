@@ -408,3 +408,15 @@ class MetricasItemServicoSerializer(serializers.ModelSerializer):
 
     def get_tempo_execucao_minutos(self, obj):
         return obj.tempo_execucao_minutos
+
+
+class TempoMedioServicoSerializer(serializers.Serializer):
+    servico_id = serializers.IntegerField()
+    descricao = serializers.CharField(source='servico__descricao')
+    quantidade_execucoes = serializers.IntegerField()
+    tempo_medio_minutos = serializers.SerializerMethodField()
+
+    @extend_schema_field(OpenApiTypes.FLOAT)
+    def get_tempo_medio_minutos(self, obj):
+        duracao_media = obj['duracao_media']
+        return round(duracao_media.total_seconds() / 60, 2)
