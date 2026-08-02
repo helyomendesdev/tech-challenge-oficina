@@ -38,6 +38,7 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
 - [Qualidade e Segurança](#qualidade-e-segurança)
 - [Limitações conhecidas](#limitações-conhecidas)
 - [Documentação de Entrega](#documentação-de-entrega)
+- [Fase 3 — Operação corporativa](#fase-3--operação-corporativa)
 - [Equipe](#equipe)
 
 ---
@@ -77,6 +78,21 @@ A Fase 2 evolui o sistema com foco em qualidade, resiliência e escalabilidade:
 - **Orquestração K8s**: manifests para Deployment, Services, ConfigMap, StatefulSet, Secret dinâmico, Metrics Server e HPA de 2–6 pods com alvo de CPU em 50%
 - **Infraestrutura como Código**: Terraform provisiona cluster kind e aplica todos os recursos K8s
 - **CI/CD**: workflows GitHub Actions versionados para CI e deploy efêmero em Kind; o status da execução remota deve ser conferido no GitHub antes da entrega
+
+### Fase 3 — Operação corporativa
+
+A Fase 3 está em desenvolvimento e separa a solução em quatro repositórios com
+CI/CD independente, governança por Pull Request e deploy para homologação e
+produção:
+
+- [`tech-challenge-oficina`](https://github.com/helyomendesdev/tech-challenge-oficina): aplicação Django executada no Kubernetes.
+- `tech-challenge-oficina-auth`: autenticação serverless por CPF e emissão de JWT.
+- `tech-challenge-oficina-k8s`: infraestrutura Kubernetes e integrações de entrada definidas com a responsável pela infraestrutura.
+- `tech-challenge-oficina-database`: banco gerenciado provisionado por Terraform.
+
+A divisão, os contratos iniciais e as decisões ainda pendentes estão documentados
+em [`docs/fase3/estrutura-repositorios.md`](docs/fase3/estrutura-repositorios.md) e
+[`docs/fase3/integracao-repositorios.md`](docs/fase3/integracao-repositorios.md).
 
 ---
 
