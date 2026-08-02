@@ -1,0 +1,9 @@
+# Responsável padrão enquanto os usuários GitHub do grupo não forem confirmados
+* @helyomendesdev
+
+# Governança e pipelines
+/.github/ @helyomendesdev
+/CONTRIBUTING.md @helyomendesdev
+
+# Documentação e integração da Fase 3
+/docs/fase3/ @helyomendesdev
