@@ -302,10 +302,45 @@ relacional"* na documentação cobrada pelo enunciado.
 
 ---
 
+## 9.1 Gerador de carga — `scripts/gerar_carga_observabilidade.py`
+
+Os três dashboards exigidos são **históricos**: volume diário, tempo médio por status e erros
+de integração só existem sobre dados acumulados. Como o ambiente é efêmero (sobe e desce para
+caber no orçamento da AWS Academy), não há tráfego orgânico — sem gerador, o dashboard aparece
+vazio no dia da gravação.
+
+O script dirige a API real respeitando o grafo de `domain/policies.py`, com tempos de
+permanência realistas comprimidos por `--aceleracao` (padrão 3600: uma hora de oficina por
+segundo, ciclo completo em ~20 s). Só biblioteca padrão — não adiciona dependência.
+
+```bash
+# tráfego contínuo enquanto se trabalha
+python scripts/gerar_carga_observabilidade.py --duracao 600 --taxa 12
+
+# rajada para popular o painel antes de gravar
+python scripts/gerar_carga_observabilidade.py --ordens 80 --aceleracao 7200
+```
+
+O que ele produz, e para qual painel:
+
+| Comportamento | Alimenta |
+|---|---|
+| Abertura de OS distribuída por 4 unidades | D1 (volume diário, faceteado por unidade) |
+| Ciclo completo com permanência variável por status | D2 (tempo médio por status) |
+| Recusa de orçamento devolvendo a OS para `DIAGNOSTICO` | D2 — retrabalho visível |
+| `--falhas` (8%): transição proibida, OS inexistente, integração fora de hora | D3 e alerta A1 |
+| Threads de leitura consultando a fila | D4 — latência de leitura, senão a mediana distorce |
+| `traceparent` W3C e `X-Request-Id` em toda requisição | §5.2 — correlação |
+
+**Limite importante:** o gerador produz *tráfego*, não eventos de negócio. `OrdemServicoEvento`
+(§5.4) é emitido pela aplicação instrumentada — rodar o gerador antes de §8 item 6 popula APM,
+logs e banco, mas **não** D1 e D2. A ordem correta é instrumentar e depois gerar.
+
 ## 10. Ordem de execução sugerida
 
 1. Criar conta New Relic e a chave de licença; guardar em Secrets Manager/SSM (não em repo).
 2. **Enviar `requisitos-para-o-time.md` para Sophia e Lucas** — é o que destrava a infra deles.
+   ✅ Enviado no grupo em 13/08.
 3. Instrumentar a aplicação localmente (kind + Docker) e validar que trace e log chegam.
 4. Emitir os custom events e montar D1/D2/D3 com dados sintéticos.
 5. Ligar o cluster real e o RDS quando a Sophia entregar.
