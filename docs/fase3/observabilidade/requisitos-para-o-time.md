@@ -55,12 +55,13 @@ O que peço é que a infraestrutura **já nasça** com estes pontos, para não r
 | # | Requisito | Por quê |
 |---|---|---|
 | L1 | Adicionar a **New Relic Lambda Layer** à function (é uma linha no Terraform/SAM) e as variáveis `NEW_RELIC_LICENSE_KEY`, `NEW_RELIC_ACCOUNT_ID`, `NEW_RELIC_LAMBDA_HANDLER`, `NEW_RELIC_EXTENSION_SEND_FUNCTION_LOGS=true` | Traz duração, erro, cold start e log da function |
-| L2 | **Propagar os headers `traceparent` e `tracestate`** que chegarem na requisição, e reinjetá-los em qualquer chamada que a Lambda faça adiante | É o que faz um único trace atravessar Gateway → Lambda → aplicação. Sem isso, o requisito de *"correlação entre requisições"* não é atendido |
+| L2 | **Propagar os headers `traceparent` e `tracestate`** que chegarem na requisição, e reinjetá-los em qualquer chamada que a Lambda faça adiante (banco, e a aplicação se um dia chamar) | Mantém o trace da autenticação inteiro, do Gateway até o banco. **Não** é o que ligaria auth e aplicação: são dois fluxos separados que saem do Gateway, cada um com o seu trace — ver `README.md` §3 |
 | L3 | API Gateway com `traceparent` na lista de headers repassados (não bloquear no mapping) | Idem |
 | L4 | **Access logging do API Gateway em JSON**, no CloudWatch, com pelo menos `requestId`, `path`, `status`, `integrationLatency`, `responseLatency`, `error.message` | Latência da borda; o enunciado pede latência das APIs |
 | L5 | Log da Lambda em **JSON**, no mesmo schema de campos de `README.md` §5.1 | Um schema só = uma consulta só nos dashboards |
 | L6 | **CPF nunca em log, nem em atributo de trace, nem em mensagem de erro.** Onde precisar identificar o cliente, usar `cliente.ref` = SHA-256 do CPF com salt de ambiente | LGPD, e é o tipo de detalhe que a avaliação da FIAP olha |
-| L7 | Resposta de erro padronizada (`{"error": {"type", "message", "requestId"}}`) e código HTTP coerente — 401 para CPF inválido, 404 para cliente inexistente, 403 para cliente inativo | Permite separar "falha do cliente" de "falha nossa" no alerta A7 |
+| L7 | Resposta de erro padronizada (`{"error": {"type", "message", "requestId"}}`). **Uma resposta só — 401 genérica — para todo caso de "não autentica": CPF inválido, inexistente ou cliente inativo.** O motivo real vai para o log/trace no atributo `auth.motivo` (`cpf_invalido` \| `nao_encontrado` \| `inativo`), nunca para o corpo, o header ou o código HTTP | Diferenciar 404 de 403 na resposta transforma o endpoint em **oráculo de enumeração**: com uma lista de CPFs, qualquer um descobre quem é cliente da oficina e quem está inativo — sem autenticar. O `auth.motivo` no log dá a mesma informação para D6 e A7, e só para quem tem acesso ao New Relic |
+| L7b | *Rate limit* por IP no endpoint de autenticação (o throttling do próprio API Gateway já resolve) | A resposta genérica tira o oráculo; o rate limit tira a força bruta de varrer uma lista de CPFs. Vale checar também se o caminho "cliente inexistente" não responde muito mais rápido que o caminho "cliente encontrado" — diferença grande de tempo reabre a enumeração pelo relógio |
 | L8 | Nomes das functions padronizados: `oficina-auth-cpf-hml` / `-prd` | Facet nos dashboards |
 
 ---
@@ -79,6 +80,10 @@ O que peço é que a infraestrutura **já nasça** com estes pontos, para não r
 2. Existe orçamento/conta AWS compartilhada, ou cada um usa a própria? Isso muda onde a chave
    de licença é guardada.
 3. A URL pública de homologação vai existir antes de 05/09? O monitor de uptime depende dela.
+4. **Lucas:** a autenticação e a aplicação são dois fluxos separados a partir do Gateway, cada
+   um com o seu trace (`README.md` §3). Se quisermos amarrar os dois numa investigação, o
+   caminho é o cliente gerar um `X-Correlation-Id` e mandar nas duas chamadas. Não é exigência
+   do enunciado — me diz se você acha que vale, senão fico com `cliente.ref` + janela de tempo.
 
 > Já conferido, não precisa responder: os status da OS no modelo atual
 > (`DIAGNOSTICO`, `EXECUCAO`, `FINALIZADA`) batem com os nomes do enunciado. Vou precisar

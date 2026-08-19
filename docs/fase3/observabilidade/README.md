@@ -46,35 +46,49 @@ D-01, D-02 e D-03 devem ser formalizados como ADR/RFC — ver §9.
 
 ## 3. Arquitetura de observabilidade
 
+A arquitetura da Fase 3 (`docs/fase3/integracao-repositorios.md`) tem **dois fluxos que saem do
+API Gateway**, não uma cadeia única:
+
 ```text
-                        ┌───────────────────────────────────────────┐
-   Cliente ──traceparent──▶  API Gateway (access log JSON)          │
-                        │        │                                  │
-                        │        ├──▶ Lambda auth (CPF → JWT)       │
-                        │        │      └ NR Lambda layer           │
-                        │        │                                  │
-                        │        └──▶ App Django no EKS             │
-                        │               ├ NR Python agent (APM)     │
-                        │               ├ log JSON em stdout        │
-                        │               └ custom events de OS       │
-                        │                      │                    │
-                        │        EKS ── nri-bundle (kube-state)     │
-                        │        RDS ── Enhanced Monitoring + PI    │
-                        └───────────────────┬───────────────────────┘
-                                            │  OTLP / HTTPS 443
-                                            ▼
-                                    New Relic One
-                                 ├ APM & Distributed Tracing
-                                 ├ Logs (in context)
-                                 ├ Kubernetes cluster explorer
-                                 ├ Synthetics (uptime)
-                                 ├ Dashboards (NRQL)
-                                 └ Alert policy + notificação
+                      ┌─────────────────────────────────────────────────────┐
+                      │  API Gateway (access log JSON)                      │
+  Cliente ─traceparent─▶                                                    │
+     │                │  ① POST /auth  ──────▶ Lambda auth (CPF → JWT) ──▶ RDS
+     │  (JWT em mão)  │      « trace A »          └ NR Lambda layer         │
+     │                │                                                     │
+     └────────────────▶  ② Bearer JWT ────────▶ App Django no EKS ─────▶ RDS
+                      │      « trace B »          ├ NR Python agent (APM)   │
+                      │                           ├ log JSON em stdout      │
+                      │                           └ custom events de OS     │
+                      └──────────────────────┬──────────────────────────────┘
+                          EKS ── nri-bundle (kube-state)
+                          RDS ── Enhanced Monitoring + nri-postgresql
+                                             │  OTLP / HTTPS 443
+                                             ▼
+                                     New Relic One
+                                  ├ APM & Distributed Tracing
+                                  ├ Logs (in context)
+                                  ├ Kubernetes cluster explorer
+                                  ├ Synthetics (uptime)
+                                  ├ Dashboards (NRQL)
+                                  └ Alert policy + notificação
 ```
 
-Um único `trace.id` atravessa Gateway → Lambda → Django → banco. Esse é o requisito de
-*"correlação entre requisições"* do enunciado e é o que permite, no vídeo, clicar num erro de
-dashboard e chegar na linha de log da requisição que o causou.
+**Não existe um `trace.id` único indo do Gateway ao banco passando pela Lambda.** ① termina
+quando a Lambda devolve o JWT; ② é uma requisição **nova** do cliente, já autenticado, e nasce
+com um trace próprio. São dois traces, cada um completo de ponta a ponta **dentro do seu
+fluxo** — e é isso que o enunciado pede por *"correlação entre requisições"*: dado um erro no
+dashboard, chegar na linha de log da requisição que o causou. Isso continua valendo, em ambos
+os fluxos.
+
+O que liga um fluxo ao outro, quando a investigação precisa cruzá-los (*"esse cliente não
+conseguiu abrir OS"*), é o `cliente.ref` (§5.1) presente nos dois, mais a janela de tempo.
+Se o grupo quiser um laço forte entre ① e ②, é preciso um `X-Correlation-Id` gerado pelo
+cliente e repassado nas duas chamadas — **decisão em aberto**, não exigida pelo enunciado.
+
+O trace de ① só se estende até a aplicação se a Lambda passar a chamá-la (hoje ela vai direto
+ao banco). É para esse caso, e para as chamadas que ela já faz adiante, que existe o requisito
+L2 de `requisitos-para-o-time.md`.
 
 ---
 
@@ -86,8 +100,25 @@ dashboard e chegar na linha de log da requisição que o causou.
 | `main` | Produção | `oficina-api-prd` | `oficina-prd` |
 
 Todo dado enviado carrega o atributo `service.environment` (`homologacao` \| `producao`).
-Dashboards e alertas fazem *facet* por esse atributo — uma conta New Relic só, dois ambientes
-separados por atributo (o free tier não dá sub-contas).
+É uma conta New Relic só, com os dois ambientes separados por atributo — o free tier não dá
+sub-contas.
+
+**Regra: todo widget e toda condição de alerta filtram ambiente explicitamente.** *Facet* não
+serve para isso — faceta separa a visualização, mas o dado dos dois ambientes continua na mesma
+consulta, e num alerta isso significa homologação disparando plantão de produção. A chave de
+filtro muda conforme a fonte, porque nem todo tipo de evento aceita atributo customizado:
+
+| Fonte | Tipo de evento | Como filtrar produção |
+|---|---|---|
+| Aplicação (eventos de negócio) | `OrdemServicoEvento` | `service.environment = 'producao'` |
+| Log (app, Lambda, Gateway) | `Log` | `service.environment = 'producao'` |
+| APM | `Transaction` | `appName = 'oficina-api-prd'` |
+| Kubernetes | `K8sContainerSample` | `clusterName = 'oficina-prd'` |
+| Lambda | `AwsLambdaInvocation` | `entityName = 'oficina-auth-cpf-prd'` |
+| Banco | `DatastoreSample` | tag `Environment = 'prd'` (B7) |
+
+Para homologação, as mesmas consultas com o sufixo `-hml` / `homologacao`. Os dashboards de
+homologação são uma cópia do dashboard de produção com essa troca — não widgets misturados.
 
 ---
 
@@ -129,6 +160,10 @@ Regras invioláveis:
 - Erro sempre carrega `error.type`, `error.message` e `error.stack`.
 - Log de integração externa sempre carrega `integracao` (ex.: `simulador-orcamento`) e
   `integracao.status`.
+- **Detalhe de falha de autenticação vive só no log.** O motivo (`cpf_invalido`,
+  `nao_encontrado`, `inativo`) entra como `auth.motivo`; a resposta HTTP é 401 genérica em
+  todos os casos. Devolver 404 para CPF inexistente e 403 para inativo entregaria ao mundo,
+  de graça, quem é cliente da oficina — ver L7 em `requisitos-para-o-time.md`.
 
 ### 5.2 Correlação entre requisições
 
@@ -165,15 +200,32 @@ Emitidos pela aplicação. Evento `OrdemServicoEvento`:
 |---|---|---|
 | `evento` | string | `ABERTURA` \| `TRANSICAO` \| `CONCLUSAO` \| `FALHA` |
 | `osId` | int | Identificador da OS |
-| `statusAnterior` | string | `RECEBIDA`, `DIAGNOSTICO`, `AGUARDANDO_APROVACAO`, `EXECUCAO`, `FINALIZADA`, `ENTREGUE` |
+| `statusAnterior` | string | `RECEBIDA`, `DIAGNOSTICO`, `AGUARDANDO`, `EXECUCAO`, `FINALIZADA`, `ENTREGUE`, `CANCELADA` |
 | `statusNovo` | string | idem |
 | `duracaoStatusSegundos` | float | Tempo que a OS permaneceu em `statusAnterior` |
-| `unidade` | string | Unidade da oficina (multi-unidade é a premissa do enunciado) |
 | `erroTipo` | string | Preenchido só quando `evento = FALHA` |
 | `traceId` | string | Liga o evento ao trace e ao log |
+| `service.environment` | string | `homologacao` \| `producao` — filtro obrigatório (§4) |
+
+Os valores de status são **exatamente** os `StatusOrdemServico` de
+`atendimento/domain/enums.py`. Nada de `AGUARDANDO_APROVACAO`: o domínio usa `AGUARDANDO`
+(o rótulo "Aguardando aprovação" é só o *display* do `STATUS_CHOICES`). Inventar um nome aqui
+faria D2 devolver vazio sem erro nenhum.
 
 O cálculo de `duracaoStatusSegundos` exige registrar o instante da transição anterior.
 **Isso é uma mudança de modelo** — ver §8, item 6.
+
+**`unidade` não existe** — nem no modelo, nem no contrato da API, nem em lugar nenhum do
+código hoje (conferido em `atendimento/`). A premissa multi-unidade é do enunciado, não da
+aplicação. Consequências:
+
+- o atributo **não** entra em `OrdemServicoEvento` enquanto não houver campo de origem;
+- D1 não faceta por unidade (§6);
+- o gerador de carga carrega a unidade sorteada no campo livre `origem` das transições
+  (`gerador-carga/<unidade>`, constante ao longo da OS), o que serve para diferenciar tráfego
+  sintético, **não** para alimentar painel;
+- se o grupo quiser a quebra por unidade, é campo novo na `OrdemServico` + migration — ver §8,
+  item 9, marcado como opcional.
 
 ### 5.5 Healthchecks e uptime
 
@@ -188,20 +240,24 @@ A aplicação já expõe `GET /health/live/` e `GET /health/ready/` (`app/urls.p
 
 ## 6. Dashboards
 
-Um dashboard "Oficina — Operação", com 3 páginas. Consultas NRQL de referência:
+Um dashboard "Oficina — Operação", com 3 páginas. Consultas NRQL de referência — todas na
+versão de **produção**; a de homologação é a mesma com a troca da §4.
 
 **D1 — Volume diário de ordens de serviço** *(exigido)*
 ```sql
 SELECT count(*) FROM OrdemServicoEvento
 WHERE evento = 'ABERTURA' AND service.environment = 'producao'
-TIMESERIES 1 day SINCE 30 days ago FACET unidade
+TIMESERIES 1 day SINCE 30 days ago
 ```
+Sem `FACET unidade`: o campo não existe no domínio (§5.4). Se entrar como campo de verdade,
+a facet volta aqui.
 
 **D2 — Tempo médio de execução por status** *(exigido)*
 ```sql
 SELECT average(duracaoStatusSegundos) / 60 AS 'Minutos médios'
 FROM OrdemServicoEvento
-WHERE evento = 'TRANSICAO' AND statusAnterior IN ('DIAGNOSTICO', 'EXECUCAO', 'FINALIZADA')
+WHERE evento = 'TRANSICAO' AND service.environment = 'producao'
+  AND statusAnterior IN ('DIAGNOSTICO', 'AGUARDANDO', 'EXECUCAO', 'FINALIZADA')
 FACET statusAnterior SINCE 7 days ago
 ```
 
@@ -209,14 +265,16 @@ FACET statusAnterior SINCE 7 days ago
 ```sql
 SELECT count(*) FROM Log
 WHERE level = 'ERROR' AND integracao IS NOT NULL
+  AND service.environment = 'producao'
 FACET integracao, error.type TIMESERIES SINCE 24 hours ago
 ```
 
 **D4 — Latência das APIs**
 ```sql
 SELECT percentile(duration, 50, 95, 99) FROM Transaction
-WHERE appName LIKE 'oficina-api%' FACET name TIMESERIES SINCE 6 hours ago
+WHERE appName = 'oficina-api-prd' FACET name TIMESERIES SINCE 6 hours ago
 ```
+`LIKE 'oficina-api%'` casaria com `-hml` e misturaria os dois ambientes no mesmo percentil.
 
 **D5 — Kubernetes e disponibilidade**
 ```sql
@@ -228,8 +286,11 @@ FACET podName TIMESERIES SINCE 3 hours ago
 **D6 — Fluxo de autenticação** (liga a frente do Lucas)
 ```sql
 SELECT count(*) FROM AwsLambdaInvocation
-WHERE entityName = 'oficina-auth-cpf' FACET error TIMESERIES SINCE 24 hours ago
+WHERE entityName = 'oficina-auth-cpf-prd' FACET error TIMESERIES SINCE 24 hours ago
 ```
+O nome leva o sufixo de ambiente (L8). Para separar recusa legítima de falha nossa, o widget
+irmão faceta por `auth.motivo` no `Log` da Lambda — atributo interno, nunca resposta HTTP
+(§7, A7, e L7 de `requisitos-para-o-time.md`).
 
 ---
 
@@ -237,16 +298,25 @@ WHERE entityName = 'oficina-auth-cpf' FACET error TIMESERIES SINCE 24 hours ago
 
 Política `Oficina — Produção`, com notificação em canal do grupo (e-mail e/ou webhook).
 
-| # | Alerta | Condição | Severidade |
-|---|---|---|---|
-| **A1** | **Falha no processamento de ordens de serviço** *(exigido)* | `SELECT count(*) FROM OrdemServicoEvento WHERE evento = 'FALHA'` > 0 por 5 min | Crítico |
-| A2 | Taxa de erro da API | `percentage(count(*), WHERE error IS true) FROM Transaction` > 5% por 5 min | Crítico |
-| A3 | Latência degradada | p95 de `Transaction.duration` > 1,5 s por 10 min | Aviso |
-| A4 | Endpoint fora do ar | Monitor Synthetics falhando em 2 localidades | Crítico |
-| A5 | Saturação de pod | `K8sContainerSample.memoryWorkingSetBytes` > 90% do limite por 10 min | Aviso |
-| A6 | Pod em CrashLoop | `restartCount` cresce mais de 3 vezes em 15 min | Crítico |
-| A7 | Falha de autenticação sistêmica | Taxa de erro da Lambda de auth > 10% por 5 min | Crítico |
-| A8 | Banco saturado | Conexões do RDS > 80% do máximo por 10 min | Aviso |
+**Toda condição desta política filtra produção na própria NRQL** (§4). Sem isso, um teste em
+homologação — inclusive o gerador de carga com `--falhas` — dispara alerta de produção, e o
+alerta perde credibilidade justamente no dia da gravação. A coluna "Filtro de ambiente" abaixo
+é obrigatória, não decorativa.
+
+| # | Alerta | Condição | Filtro de ambiente | Severidade |
+|---|---|---|---|---|
+| **A1** | **Falha no processamento de ordens de serviço** *(exigido)* | `SELECT count(*) FROM OrdemServicoEvento WHERE evento = 'FALHA'` > 0 por 5 min | `AND service.environment = 'producao'` | Crítico |
+| A2 | Taxa de erro da API | `percentage(count(*), WHERE error IS true) FROM Transaction` > 5% por 5 min | `WHERE appName = 'oficina-api-prd'` | Crítico |
+| A3 | Latência degradada | p95 de `Transaction.duration` > 1,5 s por 10 min | `WHERE appName = 'oficina-api-prd'` | Aviso |
+| A4 | Endpoint fora do ar | Monitor Synthetics falhando em 2 localidades | monitor da URL de produção | Crítico |
+| A5 | Saturação de pod | `K8sContainerSample.memoryWorkingSetBytes` > 90% do limite por 10 min | `WHERE clusterName = 'oficina-prd'` | Aviso |
+| A6 | Pod em CrashLoop | `restartCount` cresce mais de 3 vezes em 15 min | `WHERE clusterName = 'oficina-prd'` | Crítico |
+| A7 | Falha de autenticação sistêmica | Taxa de erro da Lambda de auth > 10% por 5 min | `WHERE entityName = 'oficina-auth-cpf-prd'` | Crítico |
+| A8 | Banco saturado | Conexões do RDS > 80% do máximo por 10 min | `WHERE Environment = 'prd'` | Aviso |
+
+A7 mede **erro da function** (5xx, timeout, exceção), não recusa de autenticação: CPF que não
+autentica é resposta 401 esperada, e contá-la como falha faria o alerta tocar sempre que
+alguém digitasse errado. A separação vem do atributo interno `auth.motivo` no log (L7).
 
 Cada alerta precisa de um **runbook** de uma página: o que significa, onde olhar, o que fazer.
 Isso conta como documentação arquitetural e é rápido de produzir.
@@ -272,6 +342,9 @@ Estas entram como PR no repositório `tech-challenge-oficina`:
    variáveis `NEW_RELIC_*`.
 8. `k8s/deployment.yaml` — `envFrom` do secret `newrelic-license`, labels `app`/`env`/`version`,
    e as probes apontando para `live` e `ready` separadamente.
+9. **Opcional, fora do mínimo:** campo `unidade` na `OrdemServico` (+ migration, + serializer de
+   abertura). Só se o grupo quiser a quebra por unidade em D1 — o enunciado não exige. Enquanto
+   não existir, `unidade` não é atributo de `OrdemServicoEvento` (§5.4).
 
 **Ponto de atenção do item 6 — já conferido:** os `STATUS_CHOICES` de `OrdemServico`
 (`atendimento/models.py:117`) são `RECEBIDA, DIAGNOSTICO, AGUARDANDO, EXECUCAO, FINALIZADA,
@@ -309,9 +382,11 @@ de integração só existem sobre dados acumulados. Como o ambiente é efêmero 
 caber no orçamento da AWS Academy), não há tráfego orgânico — sem gerador, o dashboard aparece
 vazio no dia da gravação.
 
-O script dirige a API real respeitando o grafo de `domain/policies.py`, com tempos de
-permanência realistas comprimidos por `--aceleracao` (padrão 3600: uma hora de oficina por
-segundo, ciclo completo em ~20 s). Só biblioteca padrão — não adiciona dependência.
+São **714 linhas** de Python de biblioteca padrão — não adiciona dependência ao projeto. O
+script dirige a API real respeitando o grafo de `domain/policies.py`, com tempos de permanência
+realistas comprimidos por `--aceleracao` (padrão 3600: uma hora de oficina por segundo, ciclo
+completo em ~20 s). Testes em `scripts/tests/` (275 linhas), rodados pela CI junto da suíte da
+aplicação — validam as transições contra a policy real do domínio, entre outras coisas.
 
 ```bash
 # tráfego contínuo enquanto se trabalha
@@ -325,12 +400,20 @@ O que ele produz, e para qual painel:
 
 | Comportamento | Alimenta |
 |---|---|
-| Abertura de OS distribuída por 4 unidades | D1 (volume diário, faceteado por unidade) |
+| Abertura de OS em ritmo configurável (`--taxa`) | D1 (volume diário) |
 | Ciclo completo com permanência variável por status | D2 (tempo médio por status) |
 | Recusa de orçamento devolvendo a OS para `DIAGNOSTICO` | D2 — retrabalho visível |
 | `--falhas` (8%): transição proibida, OS inexistente, integração fora de hora | D3 e alerta A1 |
 | Threads de leitura consultando a fila | D4 — latência de leitura, senão a mediana distorce |
 | `traceparent` W3C e `X-Request-Id` em toda requisição | §5.2 — correlação |
+
+Ao encerrar (fim de `--duracao`, cota de `--ordens` ou Ctrl+C), o script para primeiro as
+threads de leitura e depois deixa as OS em andamento fecharem o ciclo, até `--espera-final`
+(padrão: o pior caso do ciclo na aceleração escolhida). Um segundo Ctrl+C aborta na hora, e o
+resumo diz quantos ciclos ficaram pela metade — OS abortada no meio vira buraco em D2.
+
+**Rodar sempre contra homologação.** As falhas de `--falhas` são erros de verdade na aplicação;
+em produção acionariam A1. É o outro lado da regra de filtro de ambiente da §4.
 
 **Limite importante:** o gerador produz *tráfego*, não eventos de negócio. `OrdemServicoEvento`
 (§5.4) é emitido pela aplicação instrumentada — rodar o gerador antes de §8 item 6 popula APM,
@@ -357,7 +440,8 @@ logs e banco, mas **não** D1 e D2. A ordem correta é instrumentar e depois ger
 | Infra da Sophia atrasar e não haver cluster real para monitorar | Alto — o vídeo exige dashboard ao vivo | Desenvolver e demonstrar contra `kind` local + agente New Relic; o cluster real vira só troca de endpoint |
 | Estourar o free tier de 100 GB/mês | Médio — corte de ingestão | `log_level=INFO` em produção, *sampling* de trace em 100% só em homologação, sem log de body |
 | CPF vazar em log da Lambda | Alto — reprovação em segurança e LGPD | Regra de hash em §5.1 acordada por escrito com Lucas antes dele codar |
-| Nomes de status divergirem do enunciado | Médio — dashboard D2 não bate com o pedido | Conferir `STATUS_CHOICES` já na semana 1 (§8, item 6) |
+| Nomes de status divergirem do domínio | Médio — D2 devolve vazio sem erro nenhum | Conferido (§8, item 6). O teste `test_status_usados_existem_no_dominio` trava isso na CI; a mesma regra vale para as NRQL, que ninguém testa — revisar §6 se o enum mudar |
+| Alerta de produção disparado por tráfego de homologação | Médio — alerta perde credibilidade justo na gravação | Filtro de ambiente obrigatório em toda condição (§4, §7); gerador de carga só contra homologação |
 | **A nuvem não ser AWS** | **Alto — pode inviabilizar o requisito de correlação** | Ver §12. Confirmar por escrito com o grupo antes de qualquer provisionamento |
 
 ---
