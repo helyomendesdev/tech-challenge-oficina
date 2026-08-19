@@ -76,6 +76,13 @@ DESFECHO_CANCELADO = 0.10
 
 UNIDADES_PADRAO = ["centro", "zona-sul", "zona-norte", "abc"]
 
+# Quantas idas e vindas DIAGNOSTICO <-> AGUARDANDO uma OS pode ter antes de
+# seguir para EXECUCAO. Usado tambem para calcular a espera de encerramento.
+TENTATIVAS_DIAGNOSTICO = 3
+
+# Teto para abortar o que sobrou depois que `parar` foi sinalizado.
+ESPERA_ABORTO_SEGUNDOS = 5.0
+
 MARCAS = [
     ("Volkswagen", ["Golf", "Polo", "T-Cross", "Virtus"]),
     ("Fiat", ["Argo", "Toro", "Mobi", "Pulse"]),
@@ -281,6 +288,9 @@ class SimuladorOrdemServico:
         self.clientes_conhecidos = clientes_conhecidos
         self.lock_clientes = lock_clientes
         self.parar = parar
+        # A unidade e da OS, nao da transicao: um carro nao troca de oficina no
+        # meio do reparo. Sorteada uma vez, vale para todo o ciclo.
+        self.unidade = rng.choice(config.unidades)
 
     # -- utilitarios --------------------------------------------------------
 
@@ -289,9 +299,6 @@ class SimuladorOrdemServico:
         minimo, maximo = PERMANENCIA_HORAS[status]
         segundos = self.rng.uniform(minimo, maximo) * 3600 / self.config.aceleracao
         return not self.parar.wait(segundos)
-
-    def _unidade(self) -> str:
-        return self.rng.choice(self.config.unidades)
 
     def _cliente_e_veiculo(self):
         """Reaproveita cliente conhecido parte das vezes -- oficina tem recorrencia."""
@@ -312,7 +319,7 @@ class SimuladorOrdemServico:
             {
                 "ordem_servico_id": ordem_id,
                 "novo_status": novo_status,
-                "origem": f"gerador-carga/{self._unidade()}",
+                "origem": f"gerador-carga/{self.unidade}",
                 "observacao": "Trafego sintetico para observabilidade.",
             },
             rng=self.rng,
@@ -346,7 +353,7 @@ class SimuladorOrdemServico:
                 {
                     "ordem_servico_id": ordem_id,
                     "novo_status": "ENTREGUE",  # proibido a partir de RECEBIDA
-                    "origem": "gerador-carga/falha-sintetica",
+                    "origem": f"gerador-carga/{self.unidade}/falha-sintetica",
                     "observacao": "Transicao deliberadamente invalida.",
                 },
                 rng=self.rng,
@@ -399,7 +406,7 @@ class SimuladorOrdemServico:
         # A OS pode voltar para DIAGNOSTICO quando o orcamento e recusado.
         # Duas idas e vindas bastam para o painel mostrar retrabalho sem
         # deixar OS presa em laco infinito.
-        for tentativa in range(3):
+        for tentativa in range(TENTATIVAS_DIAGNOSTICO):
             if not self._dormir("DIAGNOSTICO"):
                 return
             if not self._transicionar(ordem_id, "AGUARDANDO"):
@@ -410,7 +417,8 @@ class SimuladorOrdemServico:
             sorteio = self.rng.random()
             if sorteio < DESFECHO_APROVADO:
                 break
-            if sorteio < DESFECHO_APROVADO + DESFECHO_RECUSADO and tentativa < 2:
+            ultima_tentativa = tentativa >= TENTATIVAS_DIAGNOSTICO - 1
+            if sorteio < DESFECHO_APROVADO + DESFECHO_RECUSADO and not ultima_tentativa:
                 self.metricas.registrar("retrabalho")
                 self._log(f"OS {ordem_id} recusada, volta para DIAGNOSTICO")
                 if not self._transicionar(ordem_id, "DIAGNOSTICO"):
@@ -443,16 +451,77 @@ class SimuladorOrdemServico:
 # ---------------------------------------------------------------------------
 
 def trafego_de_leitura(api: ClienteAPI, config: argparse.Namespace,
-                       rng: random.Random, parar: threading.Event) -> None:
+                       rng: random.Random, parar_leitura: threading.Event,
+                       parar: threading.Event) -> None:
     """Consulta a fila em intervalos, como um painel de recepcao aberto.
 
     Sem isso o dashboard de latencia so mostra escrita, e a mediana fica
     distorcida para cima.
+
+    Dois eventos de parada, de proposito: `parar_leitura` encerra so a leitura,
+    no inicio da drenagem, para que a espera pelas OS em andamento nao fique
+    presa nestas threads (que rodam em laco infinito). `parar` e o aborto geral.
     """
-    while not parar.is_set():
+    while not parar_leitura.is_set() and not parar.is_set():
         api.chamar("GET", "/api/v1/ordens-servico/fila/", rng=rng)
-        if parar.wait(rng.uniform(1.0, 4.0)):
+        if parar_leitura.wait(rng.uniform(1.0, 4.0)):
             return
+
+
+# ---------------------------------------------------------------------------
+# Encerramento
+# ---------------------------------------------------------------------------
+
+def espera_maxima_ciclo(aceleracao: float,
+                        tentativas: int = TENTATIVAS_DIAGNOSTICO) -> float:
+    """Pior caso, em segundos, para uma OS recem-aberta fechar o ciclo.
+
+    Somatorio do teto de permanencia de cada status no caminho mais longo
+    (todas as recusas de orcamento possiveis), comprimido pela aceleracao.
+    """
+    horas = (
+        PERMANENCIA_HORAS["RECEBIDA"][1]
+        + tentativas * (
+            PERMANENCIA_HORAS["DIAGNOSTICO"][1] + PERMANENCIA_HORAS["AGUARDANDO"][1]
+        )
+        + PERMANENCIA_HORAS["EXECUCAO"][1]
+        + PERMANENCIA_HORAS["FINALIZADA"][1]
+    )
+    return horas * 3600 / aceleracao
+
+
+def encerrar(threads_os: list, threads_leitura: list,
+             parar_leitura: threading.Event, parar: threading.Event,
+             espera_final: float) -> int:
+    """Encerra na ordem certa e devolve quantos ciclos ficaram incompletos.
+
+    A ordem importa: os leitores rodam em laco infinito e so terminam por
+    evento, entao esperar por eles junto com as OS consumia todo o orcamento de
+    drenagem e deixava os ciclos de verdade pela metade. Primeiro os leitores
+    saem, depois as OS drenam ate `espera_final`, e so entao vem o aborto geral.
+    """
+    parar_leitura.set()
+
+    limite = time.monotonic() + max(0.0, espera_final)
+    try:
+        for thread in threads_os:
+            restante = limite - time.monotonic()
+            if restante <= 0:
+                break
+            thread.join(timeout=restante)
+    except KeyboardInterrupt:
+        print("\nSegundo Ctrl+C: abortando os ciclos ainda em andamento.")
+
+    # Tira do wait quem ainda estiver dormindo entre duas transicoes.
+    parar.set()
+    limite_aborto = time.monotonic() + ESPERA_ABORTO_SEGUNDOS
+    for thread in threads_os + threads_leitura:
+        restante = limite_aborto - time.monotonic()
+        if restante <= 0:
+            break
+        thread.join(timeout=restante)
+
+    return sum(1 for thread in threads_os if thread.is_alive())
 
 
 # ---------------------------------------------------------------------------
@@ -485,6 +554,10 @@ def montar_argumentos() -> argparse.Namespace:
                         help="Unidades da oficina, usadas como facet nos paineis.")
     parser.add_argument("--leitores", type=int, default=2,
                         help="Threads consultando a fila continuamente.")
+    parser.add_argument("--espera-final", type=float, default=None,
+                        help="Segundos para as OS em andamento fecharem o ciclo "
+                             "no encerramento. Padrao: pior caso do ciclo na "
+                             "aceleracao escolhida. Use 0 para sair na hora.")
     parser.add_argument("--semente", type=int, default=None,
                         help="Semente aleatoria, para execucao reproduzivel.")
     parser.add_argument("--verboso", action="store_true")
@@ -500,9 +573,11 @@ def validar(config: argparse.Namespace) -> None:
         raise SystemExit("--aceleracao precisa ser maior que zero.")
     if config.taxa <= 0:
         raise SystemExit("--taxa precisa ser maior que zero.")
+    if config.espera_final is not None and config.espera_final < 0:
+        raise SystemExit("--espera-final nao pode ser negativa.")
 
 
-def relatorio(metricas: Metricas, segundos: float) -> None:
+def relatorio(metricas: Metricas, segundos: float, incompletos: int = 0) -> None:
     print("\n" + "=" * 62)
     print("RESUMO DA GERACAO DE CARGA")
     print("=" * 62)
@@ -514,6 +589,11 @@ def relatorio(metricas: Metricas, segundos: float) -> None:
     print(f"Retrabalho (recusas)  : {metricas.retrabalho}")
     print(f"Falhas injetadas      : {metricas.falhas_injetadas}")
     print(f"Erros inesperados     : {metricas.erros_inesperados}")
+    if incompletos:
+        print(
+            f"Ciclos incompletos    : {incompletos} "
+            "(OS abortadas no meio; use --espera-final maior para drenar tudo)"
+        )
 
     if metricas.latencias_ms:
         amostras = sorted(metricas.latencias_ms)
@@ -553,19 +633,22 @@ def main() -> int:
     print(f"Autenticado em {config.base_url} como '{config.usuario}'.")
 
     parar = threading.Event()
+    parar_leitura = threading.Event()
     clientes_conhecidos: list = []
     lock_clientes = threading.Lock()
     vagas = threading.Semaphore(config.concorrencia)
-    threads: list[threading.Thread] = []
+    threads_os: list[threading.Thread] = []
+    threads_leitura: list[threading.Thread] = []
 
     for indice in range(config.leitores):
         leitor = threading.Thread(
             target=trafego_de_leitura,
-            args=(api, config, random.Random(semente + 9000 + indice), parar),
+            args=(api, config, random.Random(semente + 9000 + indice),
+                  parar_leitura, parar),
             daemon=True,
         )
         leitor.start()
-        threads.append(leitor)
+        threads_leitura.append(leitor)
 
     intervalo = 60.0 / config.taxa
     limite_ordens = config.ordens if config.ordens > 0 else None
@@ -601,24 +684,29 @@ def main() -> int:
 
             thread = threading.Thread(target=trabalhar, daemon=True)
             thread.start()
-            threads.append(thread)
+            threads_os.append(thread)
             lancadas += 1
             time.sleep(intervalo)
     except KeyboardInterrupt:
-        print("\nInterrompido. Aguardando as OS em andamento fecharem o ciclo...")
+        print("\nInterrompido. Ctrl+C de novo aborta sem drenar.")
 
     # Deixa as OS ja abertas terminarem o ciclo antes de encerrar,
     # senao o painel de tempo medio por status fica com buracos.
-    espera_maxima = max(PERMANENCIA_HORAS["AGUARDANDO"][1], 16.0) * 3600 / config.aceleracao
-    limite = time.monotonic() + espera_maxima * 4
-    for thread in threads:
-        restante = limite - time.monotonic()
-        if restante <= 0:
-            break
-        thread.join(timeout=restante)
+    espera_final = (
+        config.espera_final if config.espera_final is not None
+        else espera_maxima_ciclo(config.aceleracao)
+    )
+    em_andamento = sum(1 for thread in threads_os if thread.is_alive())
+    if em_andamento and espera_final:
+        print(
+            f"Aguardando {em_andamento} OS fecharem o ciclo "
+            f"(ate {espera_final:.0f}s)..."
+        )
+    incompletos = encerrar(
+        threads_os, threads_leitura, parar_leitura, parar, espera_final
+    )
 
-    parar.set()
-    relatorio(metricas, time.monotonic() - inicio)
+    relatorio(metricas, time.monotonic() - inicio, incompletos)
     return 0 if metricas.erros_inesperados == 0 else 2
 
 
