@@ -14,14 +14,22 @@ Complementa a §10 do [README da frente](README.md).
 
 Esta parte é manual e leva poucos minutos.
 
-1. Acesse `newrelic.com` e crie a conta pela opção de **free tier**.
-2. **Não** informe cartão de crédito. O plano gratuito é perpétuo: 100 GB/mês de
-   ingestão e 1 usuário *full platform*. Se a tela pedir cartão, você entrou pelo
-   fluxo de trial pago — volte e escolha o plano gratuito.
-3. Escolha a **região do data center** (US ou EU). A escolha é **definitiva** e
-   muda o endpoint de ingestão; use **US**, que é o padrão e o que a maioria dos
-   exemplos da documentação assume.
-4. Confirme o e-mail de verificação.
+1. Acesse `newrelic.com/signup`. A tela chama-se **"Create your free account"** e
+   pede só dois campos: **Company Email** e **Name**. O botão é
+   **"Get Started Free"**. Há também "Or sign up with" — Google, GitHub, GitLab e
+   Bitbucket.
+2. Apesar do rótulo *Company Email*, e-mail pessoal costuma ser aceito. Se for
+   recusado, use o cadastro pelo GitHub.
+3. Confirme o e-mail de verificação.
+
+O plano gratuito é perpétuo: 100 GB/mês de ingestão e 1 usuário *full platform*.
+A própria página declara **"No credit card required"** — não há etapa de
+pagamento neste fluxo.
+
+> **Região do data center:** não há escolha na tela de cadastro. Se ela aparecer
+> em alguma etapa posterior, a decisão é definitiva e muda o endpoint de
+> ingestão. Conferido em 2026-08-23; a descrição anterior deste runbook mandava
+> escolher a região no cadastro, o que não corresponde à tela real.
 
 ### O que anotar depois
 
