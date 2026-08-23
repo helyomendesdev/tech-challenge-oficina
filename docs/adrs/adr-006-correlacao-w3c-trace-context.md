@@ -7,7 +7,7 @@
 | **Status** | Aceito |
 | **Autores** | Luís Fernando Montes (RM367183) |
 | **Data** | 2026-08-23 |
-| **Versão** | 1.0 |
+| **Versão** | 1.1 |
 
 ---
 
@@ -85,16 +85,23 @@ Os `contextvars` do middleware conhecem apenas o span criado na borda da requisi
 | **Só `traceparent`, sem identificador de negócio** | Deixa o suporte sem um identificador estável para citar ao cliente, e acopla o atendimento ao formato de tracing |
 | **B3 (Zipkin)** | Padrão anterior, ainda suportado por várias ferramentas, mas W3C é o sucessor formal e o que o agente escolhido usa por padrão |
 
-## 7. Ponto em aberto — correlação **entre** os dois fluxos
+## 7. Correlação **entre** os dois fluxos — `X-Correlation-Id`
 
-Esta ADR resolve a correlação **dentro** de cada fluxo. Ligar o fluxo de autenticação ao de aplicação é um problema em aberto que **não é decisão desta frente**, porque exige mudança no API Gateway e na Lambda.
+O W3C Trace Context resolve a correlação **dentro** de cada fluxo. Ligar o fluxo de autenticação ao de aplicação é outro problema: os dois saem do API Gateway de forma independente, iniciados pelo cliente, e não há relação de causalidade que o `traceparent` pudesse expressar.
 
-A opção recomendada é um **`X-Correlation-Id` gerado pelo cliente** e reutilizado nas duas chamadas, validado e devolvido pelos dois componentes. A alternativa por hash de `cliente.ref` exigiria claim estável no JWT, canonicalização e segredo compartilhado entre componentes — mais superfície para menos garantia.
+**Decisão, tomada pelo grupo em 2026-08-23:** um **`X-Correlation-Id` gerado pelo cliente**, reutilizado nas duas chamadas, validado e **devolvido** por Gateway, Lambda e aplicação. Recomendado pelo Hélio na revisão do PR #11 e acordado pelo Lucas, que responde pelo Gateway e pela Lambda.
 
-Enquanto o grupo não decidir, `integracao-repositorios.md` deve declarar explicitamente que a correlação existe apenas dentro de cada fluxo. Declarar é obrigatório: um documento que promete correlação transversal inexistente é pior que um que admite o limite.
+Devolver o header não é detalhe: sem isso o cliente não tem como reusar o mesmo valor na segunda chamada quando ele próprio não o gerou, e o laço deixa de existir. É o requisito L9 de `requisitos-para-o-time.md`.
+
+### Por que não a alternativa por `cliente.ref`
+
+Derivar um identificador comum do hash do CPF pareceria mais simples — o valor já existe nos dois fluxos. Mas exigiria claim estável no JWT, canonicalização acordada entre componentes e um segredo compartilhado para que os hashes coincidissem. Mais superfície de acordo, mais lugares para divergir em silêncio, e ainda assim um identificador que **não distingue duas tentativas do mesmo cliente** — o caso mais comum numa investigação de suporte.
+
+O `cliente.ref` mais janela de tempo permanece como laço fraco, para requisição que chegue sem o header. É de última instância, não substituto.
 
 ## 8. Histórico de Revisões
 
 | Versão | Data | Autor | Descrição |
 |---|---|---|---|
 | 1.0 | 2026-08-23 | Luís Fernando Montes | Versão inicial, formalizando D-03 e registrando as duas armadilhas encontradas na implementação |
+| 1.1 | 2026-08-23 | Luís Fernando Montes | §7 deixa de ser ponto em aberto: o grupo fechou no `X-Correlation-Id`, que vira o requisito L9 |
