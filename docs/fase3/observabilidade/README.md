@@ -126,7 +126,7 @@ homologação são uma cópia do dashboard de produção com essa troca — não
 
 ### 5.1 Logs estruturados (JSON)
 
-Formato único para aplicação, Lambda e API Gateway. Uma linha JSON por evento, em `stdout`.
+Formato único para aplicação e Lambda. Ambas escrevem uma linha JSON por evento em `stdout`; o API Gateway produz access logs em JSON no CloudWatch.
 
 ```json
 {
@@ -427,7 +427,7 @@ logs e banco, mas **não** D1 e D2. A ordem correta é instrumentar e depois ger
 3. Instrumentar a aplicação localmente (kind + Docker) e validar que trace e log chegam.
 4. Emitir os custom events e montar D1/D2/D3 com dados sintéticos.
 5. Ligar o cluster real e o RDS quando a Sophia entregar.
-6. Ligar a Lambda com o Lucas e provar o trace atravessando os três componentes.
+6. Ligar a Lambda com o Lucas e provar o trace de autenticação (Gateway → Lambda → banco) e o trace da aplicação (Gateway → Django → banco).
 7. Alertas, runbooks, ADRs/RFC.
 8. Ensaiar as cenas do vídeo.
 
