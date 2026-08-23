@@ -25,6 +25,7 @@ from atendimento.application.use_cases.processar_resposta_orcamento import (
 from atendimento.infrastructure.notifications.fake_notification_adapter import (
     FakeNotificationAdapter,
 )
+from atendimento.infrastructure.observabilidade_adapter import ObservabilidadeAdapter
 from atendimento.infrastructure.repositories.django_cliente_repository import (
     DjangoClienteRepository,
 )
@@ -54,6 +55,7 @@ def build_abrir_ordem_servico_use_case() -> AbrirOrdemServicoUseCase:
         ordem_servico_repository=DjangoOrdemServicoRepository(),
         transaction_manager=DjangoTransactionManager(),
         notification_port=FakeNotificationAdapter(),
+        observabilidade_port=ObservabilidadeAdapter(),
     )
 
 
@@ -76,6 +78,7 @@ def build_processar_resposta_orcamento_use_case():
     return ProcessarRespostaOrcamentoUseCase(
         ordem_servico_repository=DjangoOrdemServicoRepository(),
         transaction_manager=DjangoTransactionManager(),
+        observabilidade_port=ObservabilidadeAdapter(),
     )
 
 
@@ -84,6 +87,7 @@ def build_atualizar_status_por_notificacao_use_case():
     return AtualizarStatusPorNotificacaoUseCase(
         ordem_servico_repository=DjangoOrdemServicoRepository(),
         transaction_manager=DjangoTransactionManager(),
+        observabilidade_port=ObservabilidadeAdapter(),
     )
 
 
