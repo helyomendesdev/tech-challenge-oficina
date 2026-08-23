@@ -41,6 +41,42 @@ pagamento neste fluxo.
 > A *User key* **não** serve para ingestão. Se o agente não reportar e não houver
 > erro visível, o primeiro suspeito é ter copiado a chave errada.
 
+### Confirmar a chave antes de ligar qualquer coisa
+
+**Faça este passo sempre.** Chave errada não produz erro visível: o agente sobe,
+a aplicação funciona, e o painel simplesmente fica vazio. Descobrir isso depois
+de subir Docker, cluster e gerador custa horas de procura no lugar errado.
+
+Uma requisição responde em segundos, mandando uma linha de log de teste:
+
+```bash
+curl -s -o /dev/null -w "HTTP %{http_code}
+"   -X POST "https://log-api.newrelic.com/log/v1"   -H "Api-Key: $NEW_RELIC_LICENSE_KEY"   -H "Content-Type: application/json"   -d '{"message":"teste de ingestao","service.name":"oficina-api","logtype":"teste-setup"}'
+```
+
+| Resposta | Significado |
+|---|---|
+| `HTTP 202` | Chave válida e ingestão funcionando |
+| `HTTP 403` | Chave recusada — tipo errado, ou região errada |
+
+Trocando o host por `log-api.eu.newrelic.com`, o mesmo teste diz **em que região
+a conta vive**: a região certa devolve 202 e a outra devolve 403.
+
+**Conferido em 2026-08-23 nesta conta:** US devolveu 202, EU devolveu 403 — a
+conta é **US**, e é esse o endpoint de todos os componentes.
+
+### Como reconhecer a chave certa
+
+| Sinal | License key de ingestão |
+|---|---|
+| Comprimento | 40 caracteres |
+| Sufixo | termina em `NRAL` |
+| Teste de ingestão | devolve `202` |
+
+Um valor com comprimento diferente é outra coisa — foi o que aconteceu na
+primeira tentativa aqui: 64 caracteres hexadecimais, recusados com 403 nas duas
+regiões.
+
 ### Onde a chave **não** pode entrar
 
 - Nunca em arquivo versionado — nem em `.env.example`, nem em manifesto, nem em
