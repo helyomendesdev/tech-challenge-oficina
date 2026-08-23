@@ -7,9 +7,22 @@
 
 set -e
 
-# Respeita comando explicito (o `command:` do docker-compose, o `command` do Job
-# de migration). Descartar "$@" faria o compose subir sem rodar migrate e
-# collectstatic, e o banco local levantaria desatualizado sem avisar ninguem.
+# Preparacao opcional, desligada por padrao. Existe para o docker-compose, que
+# antes fazia isso por um `command:` proprio -- e o comando explicito nao passa
+# pelo wrapper do agente (ver abaixo), entao o compose subia sem APM sem avisar.
+# No Kubernetes fica desligada: quem migra la e o Job dedicado.
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+    echo "INFO: aplicando migrations"
+    python manage.py migrate --noinput
+fi
+
+if [ "$RUN_COLLECTSTATIC" = "true" ]; then
+    echo "INFO: coletando arquivos estaticos"
+    python manage.py collectstatic --noinput
+fi
+
+# Respeita comando explicito (o `command` do Job de migration, um shell para
+# depurar). Descartar "$@" faria esses casos rodarem outra coisa em silencio.
 if [ "$#" -eq 0 ]; then
     set -- gunicorn app.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60
 fi
