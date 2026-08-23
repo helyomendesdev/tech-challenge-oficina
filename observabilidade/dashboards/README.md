@@ -65,6 +65,21 @@ com os dois sufixos, misturando ambientes no mesmo percentil.
   sem o encaminhamento do agente o log simplesmente não sai da máquina — e o
   widget de integração fica vazio sem que nada indique o motivo.
 
+## Duas armadilhas do D2
+
+**`FINALIZADA` só aparece se a consulta incluir `CONCLUSAO`.** A transição
+`FINALIZADA → ENTREGUE` é emitida como evento `CONCLUSAO`, não `TRANSICAO`.
+Filtrar só `evento = 'TRANSICAO'` — como a §6 da especificação fazia até
+2026-08-23 — exclui em silêncio o tempo gasto no último status, e o painel mostra
+quatro faixas onde deveria mostrar cinco. Ninguém percebe olhando o gráfico.
+
+**A janela de 7 dias mistura rodadas de aceleração diferente.** O gerador comprime
+o tempo pelo fator `--aceleracao`, então uma rodada de demonstração a 150000 e
+outra realista a 3600 produzem durações em escalas incompatíveis, e a média entre
+elas não significa nada. Em produção o problema não existe — é artefato do
+gerador. Para conferir o painel depois de gerar carga, estreite a janela para
+cobrir só a última rodada.
+
 ## D5 e D6
 
 Ficam fora deste arquivo enquanto não houver dado por trás. Painel vazio num
