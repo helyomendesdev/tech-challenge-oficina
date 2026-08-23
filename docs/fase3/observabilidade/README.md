@@ -362,9 +362,9 @@ relacional"* na documentação cobrada pelo enunciado.
 
 | Entregável | Onde |
 |---|---|
-| ADR — escolha da ferramenta de observabilidade (D-01/D-02) | `docs/adrs/` do repo da aplicação |
-| ADR — estratégia de correlação W3C Trace Context (D-03) | `docs/adrs/` |
-| RFC — padrão de logs estruturados JSON | `docs/rfcs/` |
+| ADR — escolha da ferramenta de observabilidade (D-01/D-02) | ✅ `docs/adrs/adr-005-observabilidade-new-relic.md` |
+| ADR — estratégia de correlação W3C Trace Context (D-03) | ✅ `docs/adrs/adr-006-correlacao-w3c-trace-context.md` |
+| RFC — padrão de logs estruturados JSON | ✅ `docs/rfcs/rfc-004-logs-estruturados-json.md` |
 | Camada de instrumentação da aplicação | PR em `tech-challenge-oficina` |
 | Instrumentação da Lambda | PR em `tech-challenge-oficina-auth` (com Lucas) |
 | Agente e secret no cluster | PR em `tech-challenge-oficina-k8s` (com Sophia) |
