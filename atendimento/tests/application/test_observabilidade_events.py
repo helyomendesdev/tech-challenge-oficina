@@ -486,3 +486,37 @@ class FallbackDoAdapterSemAgenteTest(SimpleTestCase):
                 f"campo '{chave}' perdido no fallback: {emitido}"
             )
         assert 'unidade' not in emitido
+
+
+class ComposicaoDasFactoriesTest(SimpleTestCase):
+    """O port precisa chegar ao use case pela composition root.
+
+    Os demais testes constroem o use case a mao e passam um dublê, entao passam
+    verdes mesmo com a factory esquecendo de injetar o adapter. Foi o que
+    aconteceu: o default e `None`, o use case pula a emissao em silencio, e o
+    painel de negocio ficaria vazio sem erro nenhum em lugar nenhum.
+    """
+
+    def test_factories_dos_use_cases_de_status_injetam_o_adapter_real(self):
+        from atendimento.infrastructure.factories import (
+            build_abrir_ordem_servico_use_case,
+            build_atualizar_status_por_notificacao_use_case,
+            build_processar_resposta_orcamento_use_case,
+        )
+
+        construtores = {
+            'abrir_ordem_servico': build_abrir_ordem_servico_use_case,
+            'atualizar_status_por_notificacao': build_atualizar_status_por_notificacao_use_case,
+            'processar_resposta_orcamento': build_processar_resposta_orcamento_use_case,
+        }
+
+        for nome, construir in construtores.items():
+            port = getattr(construir(), 'observabilidade_port', None)
+            assert port is not None, (
+                f"factory de {nome} nao injetou observabilidade_port: "
+                "o use case pula a emissao de OrdemServicoEvento em silencio"
+            )
+            assert isinstance(port, ObservabilidadeAdapter), (
+                f"factory de {nome} injetou {type(port).__name__}, "
+                "nao o adapter real"
+            )
