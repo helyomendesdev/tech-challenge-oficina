@@ -5,6 +5,8 @@ metadata:
   namespace: oficina
   labels:
     app: oficina-app
+    env: homologacao
+    version: "1.0.0"
 spec:
   replicas: 2
   strategy:
@@ -19,6 +21,8 @@ spec:
     metadata:
       labels:
         app: oficina-app
+        env: homologacao
+        version: "1.0.0"
     spec:
       containers:
       - name: app
@@ -31,6 +35,9 @@ spec:
             name: oficina-config
         - secretRef:
             name: oficina-secret
+        - secretRef:
+            name: newrelic-license
+            optional: true
         resources:
           requests:
             cpu: "100m"
