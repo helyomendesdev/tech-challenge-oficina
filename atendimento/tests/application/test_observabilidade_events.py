@@ -13,7 +13,7 @@ import json
 from io import StringIO
 from unittest.mock import Mock, patch, MagicMock
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from datetime import datetime, timezone, timedelta
 import pytest
 
@@ -421,7 +421,7 @@ class TestObservabilidadeAdapterNoop:
         adapter.registrar_evento_ordem_servico(evento)
 
 
-class FallbackDoAdapterSemAgenteTest(TestCase):
+class FallbackDoAdapterSemAgenteTest(SimpleTestCase):
     """O caminho que roda hoje: sem o pacote `newrelic`, o evento vira log JSON.
 
     Os demais testes do adapter mockam `record_custom_event`, entao exercitam so
@@ -466,7 +466,11 @@ class FallbackDoAdapterSemAgenteTest(TestCase):
         logger.setLevel(_logging.INFO)
         logger.propagate = False
         try:
-            ObservabilidadeAdapter().registrar_evento_ordem_servico(dict(self.EVENTO))
+            # Forcar o caminho do fallback em vez de depender do ambiente: na CI o
+            # pacote `newrelic` esta instalado e o adapter tomaria o outro ramo,
+            # deixando este teste verde por acidente aqui e vermelho la.
+            with patch.object(observabilidade_adapter, 'record_custom_event', None):
+                ObservabilidadeAdapter().registrar_evento_ordem_servico(dict(self.EVENTO))
         finally:
             logger.removeHandler(handler)
             logger.setLevel(nivel_anterior)
