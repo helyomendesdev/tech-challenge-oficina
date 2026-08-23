@@ -327,7 +327,8 @@ Isso conta como documentação arquitetural e é rápido de produzir.
 
 Estas entram como PR no repositório `tech-challenge-oficina`:
 
-1. `requirements.txt`: `newrelic`, `python-json-logger`.
+1. `requirements.txt`: `newrelic`. O formatter JSON usa a stdlib `json` — o schema desta
+   seção é fixo e pequeno, e uma biblioteca a menos é uma a menos na CI e na imagem.
 2. `app/observabilidade/logging.py` — formatter JSON + filtro que injeta `trace.id`,
    `span.id`, `request.id` a partir de `contextvars`.
 3. `app/observabilidade/middleware.py` — `CorrelationIdMiddleware` (§5.2), registrado como o
