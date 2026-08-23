@@ -262,10 +262,14 @@ a facet volta aqui.
 ```sql
 SELECT average(duracaoStatusSegundos) / 60 AS 'Minutos médios'
 FROM OrdemServicoEvento
-WHERE evento = 'TRANSICAO' AND service.environment = 'producao'
-  AND statusAnterior IN ('DIAGNOSTICO', 'AGUARDANDO', 'EXECUCAO', 'FINALIZADA')
+WHERE evento IN ('TRANSICAO', 'CONCLUSAO') AND `service.environment` = 'producao'
+  AND statusAnterior IN ('RECEBIDA', 'DIAGNOSTICO', 'AGUARDANDO', 'EXECUCAO', 'FINALIZADA')
 FACET statusAnterior SINCE 7 days ago
 ```
+**`CONCLUSAO` precisa entrar no filtro.** A transição `FINALIZADA → ENTREGUE` é emitida como
+`CONCLUSAO` (§5.4), então filtrar só `TRANSICAO` exclui em silêncio o tempo gasto no último
+status: o painel mostra quatro faixas onde deveria mostrar cinco, e nada indica a falta.
+Conferido contra dado real em 2026-08-23.
 
 **D3 — Erros e falhas nas integrações** *(exigido)*
 ```sql
