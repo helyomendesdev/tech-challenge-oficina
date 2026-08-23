@@ -422,6 +422,10 @@ logs e banco, mas **não** D1 e D2. A ordem correta é instrumentar e depois ger
 
 ## 10. Ordem de execução sugerida
 
+O passo a passo operacional — criar a conta, ligar o agente local, subir no
+`kind` e conferir que o dado chegou — está em
+[`runbook-ligar-observabilidade.md`](runbook-ligar-observabilidade.md).
+
 1. Criar conta New Relic e a chave de licença; guardar em Secrets Manager/SSM (não em repo).
 2. **Enviar `requisitos-para-o-time.md` para Sophia e Lucas** — é o que destrava a infra deles.
    ✅ Enviado no grupo em 13/08.
