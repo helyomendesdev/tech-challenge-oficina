@@ -103,9 +103,36 @@ O formatter usa a stdlib `json`, não `python-json-logger`. O schema é fixo e p
 
 Preferência pelo agente de observabilidade quando presente (`get_linking_metadata()`), com queda para os `contextvars` do middleware quando ausente. O motivo está em [ADR-006 §5.2](../adrs/adr-006-correlacao-w3c-trace-context.md): os `contextvars` conhecem só o span da borda, e o agente abre spans internos que o middleware não vê.
 
-### 6.4 O agente não encaminha logs
+### 6.4 O agente não encaminha logs — e não é só por duplicação
 
-`NEW_RELIC_APPLICATION_LOGGING_FORWARDING_ENABLED` fica em `false`. Os logs já saem em `stdout` e são coletados pela integração de Kubernetes; com o forwarding do agente também ligado, a mesma linha chega duas vezes e todo painel que conta linha conta dobrado.
+`NEW_RELIC_APPLICATION_LOGGING_FORWARDING_ENABLED` fica em `false`. A razão óbvia é
+duplicação: os logs já saem em `stdout` e são coletados pela integração de Kubernetes, então
+com o forwarding do agente também ligado a mesma linha chega duas vezes e todo painel que
+conta linha conta dobrado.
+
+A razão menos óbvia é mais importante, e foi medida em 2026-08-23 com o agente 9.13.0:
+**o encaminhamento do agente não usa este formatter.** Ele engancha no `logging` do Python e
+monta a linha a partir do `LogRecord`, então `message` chega como a mensagem crua e **nenhum
+campo deste RFC vira atributo** — nem `service.environment`, que a §4 exige como filtro
+obrigatório em todo widget de log.
+
+Ligar `application_logging.forwarding.context_data.enabled` faz os campos passados via `extra`
+chegarem, mas com três problemas:
+
+1. **Chegam com prefixo `context.`** — `context.integracao`, não `integracao`. O caminho do
+   cluster (stdout, com a integração fazendo o parse do JSON) entrega os nomes deste RFC. Os
+   dois caminhos produzem esquemas diferentes, e o mesmo widget não serve nos dois.
+2. **`service.environment` continua ausente**, porque é o formatter que o injeta, não o `extra`.
+3. **Vai o `LogRecord` inteiro**: `context.thread`, `context.processName`,
+   `context.relativeCreated` e — o que importa — **`context.exc_info` com o traceback completo**.
+   Isso é custo de ingestão e é onde a regra 1 da §4 se rompe sem ninguém planejar: mensagem de
+   exceção é exatamente o lugar por onde um CPF vaza. Se algum dia for ligado, tem de ser com a
+   lista `include` restrita aos campos deste RFC.
+
+**Consequência para quem for verificar localmente:** `docker compose` não tem coletor, então o
+log não sai da máquina — e é assim que deve ser. A verificação local do schema se faz lendo o
+`stdout` do container, onde a linha JSON está completa. O ambiente que reproduz o comportamento
+de produção é o `kind` com a integração de Kubernetes instalada, não o compose.
 
 ### 6.5 Logger sob namespace configurado
 
