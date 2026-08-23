@@ -54,16 +54,21 @@ com os dois sufixos, misturando ambientes no mesmo percentil.
 | D5 — Kubernetes | `nri-bundle` no cluster | pendente — infra |
 | D6 — autenticação | Lambda com a layer do New Relic | pendente — frente do Lucas |
 
-### O widget de log e o encaminhamento
+### O widget de log só tem dado no cluster
 
-`NEW_RELIC_APPLICATION_LOGGING_FORWARDING_ENABLED` é **assimétrico de propósito**:
+O widget "D3 — erros nas integrações (log)" consulta atributos que só existem
+quando o log chega pelo `stdout` e a **integração de Kubernetes** faz o parse da
+linha JSON. É o caminho de produção, e o `kind` reproduz.
 
-- **No Kubernetes: `false`.** Quem recolhe o `stdout` é a integração do cluster.
-  Com o encaminhamento do agente também ligado, a mesma linha chega duas vezes e
-  todo painel que conta linha conta dobrado.
-- **Local (`docker compose`): `true`.** Não existe coletor nenhum no compose, então
-  sem o encaminhamento do agente o log simplesmente não sai da máquina — e o
-  widget de integração fica vazio sem que nada indique o motivo.
+**No `docker compose` ele fica vazio, e está certo assim.** Não há coletor no
+compose, e ligar o encaminhamento do agente não resolve: medido em 2026-08-23, o
+agente ignora o formatter JSON e manda a mensagem crua, sem `integracao` e sem
+`service.environment`. Com `context_data` ligado os campos chegam, mas com prefixo
+`context.` — esquema diferente do de produção, mesmo widget não serve nos dois — e
+junto vai o `LogRecord` inteiro, incluindo traceback. Detalhe em RFC-004 §6.4.
+
+Para conferir o schema localmente, leia o `stdout` do container: a linha JSON está
+lá completa.
 
 ## Duas armadilhas do D2
 
