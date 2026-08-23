@@ -1,11 +1,15 @@
 """Testes do gerador de carga de observabilidade.
 
-Cobrem o que a revisao do PR #11 apontou e o que quebraria em silencio:
-o ciclo tem de respeitar o grafo de transicoes do dominio, a unidade e da OS
-(nao da transicao), os nomes de status tem de existir no dominio, e o
-encerramento nao pode ficar preso nas threads de leitura.
+Cobrem o que as duas revisoes do PR #11 apontaram e o que quebraria em silencio:
+o ciclo tem de respeitar o grafo de transicoes do dominio contando as duas rotas
+(status generico e fluxo de orcamento), a unidade e da OS e nao da transicao, os
+nomes de status tem de existir no dominio, o encerramento nao pode ficar preso
+nas threads de leitura nem mentir na contagem de ciclos incompletos, e excecao
+dentro do ciclo tem de virar codigo de saida diferente de zero.
 
-Nao sobem servidor: a API e dublada. Rodam em menos de um segundo.
+Nao sobem servidor: a API e dublada, e os testes de laco dirigem o `main()` real
+com argv e ClienteAPI trocados. Os testes de encerramento e de prazo esperam
+relogio de verdade, entao a suite leva algumas dezenas de segundos.
 """
 
 import argparse
@@ -21,6 +25,7 @@ from atendimento.domain.exceptions import TransicaoStatusInvalidaError
 from scripts.gerar_carga_observabilidade import (
     ESPERA_ABORTO_SEGUNDOS,
     PERMANENCIA_HORAS,
+    Metricas,
     SimuladorOrdemServico,
     encerrar,
     espera_maxima_ciclo,
@@ -28,11 +33,13 @@ from scripts.gerar_carga_observabilidade import (
     gerar_placa,
     gerar_traceparent,
     trafego_de_leitura,
+    validar,
 )
 import random
 
 ROTA_STATUS = "/api/v1/ordens-servico/status-notificacoes/"
 ROTA_ABERTURA = "/api/v1/ordens-servico/abrir/"
+ROTA_ORCAMENTO = "/api/v1/simulacao/orcamento/"
 
 
 # ---------------------------------------------------------------------------
@@ -42,13 +49,16 @@ ROTA_ABERTURA = "/api/v1/ordens-servico/abrir/"
 class APIDublada:
     """Responde como a API da oficina responderia, sem rede."""
 
-    def __init__(self, aceitar_transicoes: bool = True):
+    def __init__(self, aceitar_transicoes: bool = True, levantar_excecao: bool = False):
         self.aceitar_transicoes = aceitar_transicoes
+        self.levantar_excecao = levantar_excecao
         self.chamadas: list[tuple[str, str, dict | None]] = []
         self._proximo_id = 1000
         self._lock = threading.Lock()
 
     def chamar(self, metodo, caminho, payload=None, rng=None):
+        if self.levantar_excecao:
+            raise RuntimeError("Erro simulado na API")
         with self._lock:
             self.chamadas.append((metodo, caminho, payload))
             if caminho == ROTA_ABERTURA:
@@ -56,15 +66,43 @@ class APIDublada:
                 return 201, {"ordem_servico_id": self._proximo_id}, 1.0
         if caminho == ROTA_STATUS:
             return (200, {}, 1.0) if self.aceitar_transicoes else (400, {}, 1.0)
+        if caminho == ROTA_ORCAMENTO:
+            return (200, {}, 1.0) if self.aceitar_transicoes else (400, {"erro": "recusado"}, 1.0)
         return 200, {}, 1.0
 
     # -- consultas de apoio -------------------------------------------------
 
     def transicoes(self) -> list[dict]:
+        """Payloads enviados a rota generica de status."""
         return [
             payload for _, caminho, payload in self.chamadas
             if caminho == ROTA_STATUS and payload
         ]
+
+    def orcamentos(self) -> list[dict]:
+        """Payloads enviados ao fluxo real de orcamento."""
+        return [
+            payload for _, caminho, payload in self.chamadas
+            if caminho == ROTA_ORCAMENTO and payload
+        ]
+
+    def sequencia_de_status(self) -> list[str]:
+        """Status por que a OS passou, na ordem cronologica real.
+
+        Parte das transicoes sai pela rota generica e parte pelo fluxo de
+        orcamento, que move a OS do lado da aplicacao: APROVADO leva a EXECUCAO
+        e RECUSADO devolve para DIAGNOSTICO. Olhar so uma das rotas esconde
+        transicao duplicada -- foi exatamente o defeito que passou batido.
+        """
+        sequencia = []
+        for _, caminho, payload in self.chamadas:
+            if caminho == ROTA_STATUS and payload:
+                sequencia.append(payload["novo_status"])
+            elif caminho == ROTA_ORCAMENTO and payload:
+                sequencia.append(
+                    "EXECUCAO" if payload["decisao"] == "APROVADO" else "DIAGNOSTICO"
+                )
+        return sequencia
 
 
 def configuracao(**ajustes) -> argparse.Namespace:
@@ -75,6 +113,12 @@ def configuracao(**ajustes) -> argparse.Namespace:
         "recorrencia": 0.0,
         "falhas": 0.0,
         "verboso": False,
+        "taxa": 10.0,
+        "duracao": 300,
+        "ordens": 0,
+        "leitores": 2,
+        "concorrencia": 12,
+        "espera_final": None,
     }
     base.update(ajustes)
     return argparse.Namespace(**base)
@@ -146,30 +190,101 @@ def test_traceparent_no_formato_w3c(semente):
 
 @pytest.mark.parametrize("semente", range(30))
 def test_transicoes_respeitam_o_grafo_do_dominio(semente):
-    """Toda transicao emitida tem de ser aceita pela policy real do dominio."""
+    """Toda transicao emitida tem de ser aceita pela policy real do dominio.
+
+    A sequencia mistura as duas rotas na ordem cronologica: parte das transicoes
+    sai pelo endpoint generico e parte pelo fluxo de orcamento. Olhar so a rota
+    generica deixaria passar transicao duplicada -- o orcamento move
+    AGUARDANDO -> EXECUCAO e o gerador emitir EXECUCAO -> EXECUCAO logo depois,
+    que a policy recusa.
+    """
     api = rodar_uma_os(semente)
 
     status_atual = StatusOrdemServico.RECEBIDA.value
-    for payload in api.transicoes():
-        novo_status = payload["novo_status"]
+    caminho = [status_atual]
+    for novo_status in api.sequencia_de_status():
         try:
             OrdemServicoStatusPolicy.validar_transicao(status_atual, novo_status)
         except TransicaoStatusInvalidaError as erro:
-            pytest.fail(f"gerador emitiu transicao invalida: {erro}")
+            pytest.fail(
+                f"gerador emitiu transicao invalida: {erro} | "
+                f"caminho: {' -> '.join(caminho)} -> {novo_status}"
+            )
         status_atual = novo_status
+        caminho.append(novo_status)
 
 
 @pytest.mark.parametrize("semente", range(30))
+
 def test_status_usados_existem_no_dominio(semente):
     """Ponto 6 da revisao: nada de AGUARDANDO_APROVACAO."""
     validos = {status.value for status in StatusOrdemServico}
-    emitidos = {payload["novo_status"] for payload in rodar_uma_os(semente).transicoes()}
-    assert emitidos <= validos
+    assert set(rodar_uma_os(semente).sequencia_de_status()) <= validos
 
 
 def test_permanencia_so_cita_status_do_dominio():
     validos = {status.value for status in StatusOrdemServico}
     assert set(PERMANENCIA_HORAS) <= validos
+
+
+# ---------------------------------------------------------------------------
+# Validacao de argumentos
+# ---------------------------------------------------------------------------
+
+def test_validar_rejeita_concorrencia_zero():
+    config = configuracao(concorrencia=0)
+    with pytest.raises(SystemExit):
+        validar(config)
+
+
+def test_validar_rejeita_concorrencia_negativa():
+    config = configuracao(concorrencia=-1)
+    with pytest.raises(SystemExit):
+        validar(config)
+
+
+def test_validar_aceita_concorrencia_positiva():
+    config = configuracao(concorrencia=1)
+    validar(config)  # nao deve lancar excecao
+
+
+def test_validar_rejeita_taxa_nao_positiva():
+    for taxa in (0.0, -1.0):
+        with pytest.raises(SystemExit):
+            validar(configuracao(taxa=taxa))
+
+
+def test_validar_rejeita_leitores_negativo():
+    config = configuracao(leitores=-1)
+    with pytest.raises(SystemExit):
+        validar(config)
+
+
+def test_validar_aceita_leitores_zero():
+    config = configuracao(leitores=0)
+    validar(config)  # nao deve lancar excecao
+
+
+def test_validar_rejeita_duracao_negativa():
+    config = configuracao(duracao=-1)
+    with pytest.raises(SystemExit):
+        validar(config)
+
+
+def test_validar_aceita_duracao_zero():
+    config = configuracao(duracao=0)
+    validar(config)  # nao deve lancar excecao
+
+
+def test_validar_rejeita_ordens_negativo():
+    config = configuracao(ordens=-1)
+    with pytest.raises(SystemExit):
+        validar(config)
+
+
+def test_validar_aceita_ordens_zero():
+    config = configuracao(ordens=0)
+    validar(config)  # nao deve lancar excecao
 
 
 @pytest.mark.parametrize("semente", range(30))
@@ -262,7 +377,7 @@ def test_encerrar_conta_ciclo_incompleto_e_nao_estoura_o_teto():
     incompletos = encerrar([os_lenta], [], parar_leitura, parar, espera_final=0.1)
     decorrido = time.monotonic() - inicio
 
-    assert incompletos == 0, "parar.set() tem de tirar a OS do wait"
+    assert incompletos == 1, "uma OS interrompida no meio tem de ser contada"
     assert not os_lenta.is_alive()
     assert decorrido < 0.1 + ESPERA_ABORTO_SEGUNDOS
 
@@ -273,3 +388,145 @@ def test_encerrar_com_espera_zero_sai_na_hora():
     encerrar([], [], parar_leitura, parar, espera_final=0.0)
     assert time.monotonic() - inicio < 1.0
     assert parar.is_set() and parar_leitura.is_set()
+
+
+# ---------------------------------------------------------------------------
+# Fluxo real de orcamento (defeito 1 da segunda revisao)
+# ---------------------------------------------------------------------------
+
+def test_orcamento_nao_e_seguido_de_transicao_para_o_mesmo_status():
+    """O endpoint de orcamento ja move a OS -- repetir a transicao vira erro.
+
+    Foi assim que o defeito nasceu: o gerador chamava /simulacao/orcamento/
+    (que leva AGUARDANDO -> EXECUCAO do lado da aplicacao) e logo depois emitia
+    EXECUCAO -> EXECUCAO na rota generica, recusada pela policy. Contra a API
+    real isso somaria um erro falso em todo ciclo aprovado.
+
+    As sementes tambem servem de guarda de cobertura: se o intervalo de
+    desfecho mudar e a recusa deixar de ser exercitada, o teste acusa.
+    """
+    decisoes_vistas = set()
+    for semente in range(60):
+        api = rodar_uma_os(semente)
+        sequencia = api.sequencia_de_status()
+        for anterior, seguinte in zip(sequencia, sequencia[1:]):
+            assert anterior != seguinte, (
+                f"semente {semente} repetiu {anterior}: "
+                f"{' -> '.join(sequencia)}"
+            )
+        decisoes_vistas.update(payload["decisao"] for payload in api.orcamentos())
+
+    assert decisoes_vistas == {"APROVADO", "RECUSADO"}, (
+        f"decisao de orcamento nao exercitada nas sementes: {decisoes_vistas}"
+    )
+
+
+def test_aprovacao_e_recusa_passam_pelo_endpoint_de_orcamento():
+    """Sem isto o painel de integracao so ve trafego nas falhas deliberadas."""
+    rotas_de_saida_do_aguardando = set()
+    for semente in range(60):
+        api = rodar_uma_os(semente)
+        for indice, (_, caminho, payload) in enumerate(api.chamadas):
+            anterior = api.chamadas[indice - 1][2] if indice else None
+            saiu_de_aguardando = (
+                anterior and anterior.get("novo_status") == "AGUARDANDO"
+            )
+            if saiu_de_aguardando:
+                rotas_de_saida_do_aguardando.add(caminho)
+
+    assert ROTA_ORCAMENTO in rotas_de_saida_do_aguardando, (
+        "aprovacao/recusa tem de sair pelo fluxo real de orcamento"
+    )
+
+
+def test_orcamento_carrega_a_unidade_no_motivo():
+    """`origem` nao existe no contrato de simulacao; o facet vai pelo motivo."""
+    motivos = []
+    for semente in range(60):
+        motivos += [p["motivo"] for p in rodar_uma_os(semente, unidades=["unica"]).orcamentos()]
+
+    assert motivos, "nenhuma decisao de orcamento foi emitida"
+    assert all(motivo.startswith("gerador-carga/unica:") for motivo in motivos)
+
+
+# ---------------------------------------------------------------------------
+# Laco de lancamento e codigo de saida (defeitos 4 e 5), dirigindo o main real
+# ---------------------------------------------------------------------------
+
+class APIParaMain:
+    """Dubla de ClienteAPI para rodar `main()` inteiro, sem rede."""
+
+    def __init__(self, *_args, **_kwargs):
+        self.aberturas = 0
+        self.levantar_excecao = False
+        self._lock = threading.Lock()
+        self._proximo_id = 1000
+
+    def autenticar(self):
+        return None
+
+    def chamar(self, metodo, caminho, payload=None, rng=None):
+        if self.levantar_excecao:
+            raise RuntimeError("quebra sintetica dentro do ciclo da OS")
+        with self._lock:
+            if caminho == ROTA_ABERTURA:
+                self.aberturas += 1
+                self._proximo_id += 1
+                return 201, {"ordem_servico_id": self._proximo_id}, 1.0
+        return 200, {}, 1.0
+
+
+def rodar_main(monkeypatch, argumentos: list, api: APIParaMain) -> int:
+    """Executa `main()` com argv e ClienteAPI dublados."""
+    import sys as _sys
+    from scripts import gerar_carga_observabilidade as gerador
+
+    monkeypatch.setattr(_sys, "argv", ["gerar_carga_observabilidade.py"] + argumentos)
+    monkeypatch.setattr(gerador, "ClienteAPI", lambda *a, **k: api)
+    return gerador.main()
+
+
+def test_main_abre_exatamente_o_numero_de_ordens_pedido(monkeypatch):
+    api = APIParaMain()
+    codigo = rodar_main(monkeypatch, [
+        "--ordens", "5", "--concorrencia", "2", "--leitores", "0",
+        "--taxa", "6000", "--aceleracao", "10000000", "--espera-final", "5",
+        "--semente", "1",
+    ], api)
+
+    assert codigo == 0
+    assert api.aberturas == 5
+
+
+def test_main_nao_lanca_ordem_depois_de_vencer_a_duracao(monkeypatch):
+    """Defeito 4: `vagas.acquire()` sem timeout lancava OS alem do prazo.
+
+    Uma vaga so e um ciclo mais longo que a duracao: com o acquire bloqueante,
+    o laco acordava quando a primeira OS liberava a vaga -- ja depois do prazo --
+    e lancava a segunda assim mesmo.
+    """
+    api = APIParaMain()
+    inicio = time.monotonic()
+    codigo = rodar_main(monkeypatch, [
+        "--duracao", "1", "--concorrencia", "1", "--leitores", "0",
+        "--taxa", "6000", "--aceleracao", "40000", "--espera-final", "0",
+        "--semente", "1",
+    ], api)
+    decorrido = time.monotonic() - inicio
+
+    assert api.aberturas == 1, "lancou OS depois do prazo vencido"
+    assert codigo == 0
+    assert decorrido < 5.0, f"encerramento levou {decorrido:.1f}s"
+
+
+def test_main_devolve_codigo_de_erro_quando_o_ciclo_quebra(monkeypatch):
+    """Defeito 5: excecao na thread saia com codigo 0 e mascarava a quebra."""
+    api = APIParaMain()
+    api.levantar_excecao = True
+    codigo = rodar_main(monkeypatch, [
+        "--ordens", "3", "--concorrencia", "2", "--leitores", "0",
+        "--taxa", "6000", "--aceleracao", "10000000", "--espera-final", "2",
+        "--semente", "1",
+    ], api)
+
+    assert codigo == 2, "excecao no worker tem de virar codigo de saida diferente de zero"

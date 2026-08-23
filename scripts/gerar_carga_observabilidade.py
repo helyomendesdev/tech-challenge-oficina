@@ -51,6 +51,7 @@ import string
 import sys
 import threading
 import time
+import traceback
 import urllib.error
 import urllib.request
 import uuid
@@ -331,6 +332,32 @@ class SimuladorOrdemServico:
         self._log(f"transicao {ordem_id} -> {novo_status} falhou: HTTP {codigo} {corpo}")
         return False
 
+    def _decidir_orcamento(self, ordem_id: int, decisao: str) -> bool:
+        """Submete decisao de orcamento via endpoint real de integracao.
+
+        A decisao passa por simulacao/orcamento/, que dispara webhook saindo da
+        aplicacao -- e o span de integracao externa que queremos medir.
+        Sucesso = HTTP 200 e ausencia de chave 'erro' no corpo.
+        """
+        # `origem` nao existe no contrato de /simulacao/orcamento/; `motivo` e o
+        # unico campo livre, entao e por ele que a unidade chega ao facet.
+        motivo = f"gerador-carga/{self.unidade}: orcamento {decisao.lower()}"
+        codigo, corpo, _ = self.api.chamar(
+            "POST", "/api/v1/simulacao/orcamento/",
+            {
+                "ordem_servico_id": ordem_id,
+                "decisao": decisao,
+                "motivo": motivo,
+            },
+            rng=self.rng,
+        )
+        if codigo == 200 and "erro" not in corpo:
+            self.metricas.registrar("transicoes_ok")
+            return True
+        self.metricas.registrar("erros_inesperados")
+        self._log(f"orcamento {ordem_id} -> {decisao} falhou: HTTP {codigo} {corpo}")
+        return False
+
     def _log(self, mensagem: str) -> None:
         if self.config.verboso:
             print(f"[{time.strftime('%H:%M:%S')}] {mensagem}", flush=True)
@@ -416,13 +443,19 @@ class SimuladorOrdemServico:
 
             sorteio = self.rng.random()
             if sorteio < DESFECHO_APROVADO:
+                # O proprio endpoint de orcamento ja move AGUARDANDO -> EXECUCAO.
+                # Emitir a transicao de novo aqui seria EXECUCAO -> EXECUCAO, que
+                # a policy recusa e viraria erro falso em todo ciclo aprovado.
+                if not self._decidir_orcamento(ordem_id, "APROVADO"):
+                    return
                 break
             ultima_tentativa = tentativa >= TENTATIVAS_DIAGNOSTICO - 1
             if sorteio < DESFECHO_APROVADO + DESFECHO_RECUSADO and not ultima_tentativa:
+                # A recusa ja devolve a OS para DIAGNOSTICO do lado da aplicacao.
+                if not self._decidir_orcamento(ordem_id, "RECUSADO"):
+                    return
                 self.metricas.registrar("retrabalho")
                 self._log(f"OS {ordem_id} recusada, volta para DIAGNOSTICO")
-                if not self._transicionar(ordem_id, "DIAGNOSTICO"):
-                    return
                 continue
             if sorteio < DESFECHO_APROVADO + DESFECHO_RECUSADO + DESFECHO_CANCELADO:
                 if self._transicionar(ordem_id, "CANCELADA"):
@@ -431,9 +464,9 @@ class SimuladorOrdemServico:
                 return
             self._log(f"OS {ordem_id} parada em AGUARDANDO (cliente nao respondeu)")
             return  # cliente que nunca responde: a OS fica na fila de proposito
+        else:
+            return  # sem aprovacao nao existe EXECUCAO: nao seguir adiante
 
-        if not self._transicionar(ordem_id, "EXECUCAO"):
-            return
         if not self._dormir("EXECUCAO"):
             return
         # OS aberta sem servicos nem pecas: a policy de finalizacao passa
@@ -512,6 +545,9 @@ def encerrar(threads_os: list, threads_leitura: list,
     except KeyboardInterrupt:
         print("\nSegundo Ctrl+C: abortando os ciclos ainda em andamento.")
 
+    # Conta ciclos incompletos na hora do corte, nao depois de parar.set()
+    incompletos = sum(1 for thread in threads_os if thread.is_alive())
+
     # Tira do wait quem ainda estiver dormindo entre duas transicoes.
     parar.set()
     limite_aborto = time.monotonic() + ESPERA_ABORTO_SEGUNDOS
@@ -521,7 +557,7 @@ def encerrar(threads_os: list, threads_leitura: list,
             break
         thread.join(timeout=restante)
 
-    return sum(1 for thread in threads_os if thread.is_alive())
+    return incompletos
 
 
 # ---------------------------------------------------------------------------
@@ -575,6 +611,14 @@ def validar(config: argparse.Namespace) -> None:
         raise SystemExit("--taxa precisa ser maior que zero.")
     if config.espera_final is not None and config.espera_final < 0:
         raise SystemExit("--espera-final nao pode ser negativa.")
+    if config.concorrencia <= 0:
+        raise SystemExit("--concorrencia precisa ser maior que zero.")
+    if config.leitores < 0:
+        raise SystemExit("--leitores nao pode ser negativo.")
+    if config.duracao < 0:
+        raise SystemExit("--duracao nao pode ser negativa.")
+    if config.ordens < 0:
+        raise SystemExit("--ordens nao pode ser negativo.")
 
 
 def relatorio(metricas: Metricas, segundos: float, incompletos: int = 0) -> None:
@@ -664,12 +708,32 @@ def main() -> int:
     lancadas = 0
     try:
         while True:
+            # Verifica limite de ordens primeiro
             if limite_ordens is not None and lancadas >= limite_ordens:
                 break
+            # Verifica limite de duracao
             if fim is not None and time.monotonic() >= fim:
                 break
 
-            vagas.acquire()
+            # Espera por uma vaga com timeout, revalidando prazo a cada volta
+            tempo_restante = None if fim is None else max(0, fim - time.monotonic())
+            timeout_vaga = min(intervalo, tempo_restante) if tempo_restante is not None else intervalo
+
+            if not vagas.acquire(timeout=timeout_vaga):
+                # Timeout aguardando vaga: verifica se venceu o prazo
+                if fim is not None and time.monotonic() >= fim:
+                    break
+                # Senao continua tentando
+                continue
+
+            # Revalidar depois de conseguir a vaga
+            if limite_ordens is not None and lancadas >= limite_ordens:
+                vagas.release()
+                break
+            if fim is not None and time.monotonic() >= fim:
+                vagas.release()
+                break
+
             rng_os = random.Random(semente + lancadas)
             simulador = SimuladorOrdemServico(
                 api, config, metricas, rng_os,
@@ -679,6 +743,15 @@ def main() -> int:
             def trabalhar(alvo_simulador=simulador):
                 try:
                     alvo_simulador.executar()
+                except Exception:
+                    # Sem isto a thread imprime o traceback e morre sozinha: o
+                    # processo principal terminaria com codigo 0 mascarando a quebra.
+                    metricas.registrar("erros_inesperados")
+                    print(
+                        f"[{time.strftime('%H:%M:%S')}] erro inesperado no ciclo da OS: "
+                        f"{traceback.format_exc() if config.verboso else sys.exc_info()[1]}",
+                        file=sys.stderr, flush=True,
+                    )
                 finally:
                     vagas.release()
 
@@ -686,7 +759,15 @@ def main() -> int:
             thread.start()
             threads_os.append(thread)
             lancadas += 1
-            time.sleep(intervalo)
+
+            # So dorme se nao foi a ultima ordem
+            if limite_ordens is None or lancadas < limite_ordens:
+                tempo_dormir_max = intervalo
+                if fim is not None:
+                    tempo_restante = fim - time.monotonic()
+                    tempo_dormir_max = min(intervalo, max(0, tempo_restante))
+                # Sono interrompivel por parar
+                parar.wait(tempo_dormir_max)
     except KeyboardInterrupt:
         print("\nInterrompido. Ctrl+C de novo aborta sem drenar.")
 
