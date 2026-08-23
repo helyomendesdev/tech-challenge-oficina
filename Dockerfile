@@ -23,6 +23,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copia o restante do código
 COPY . .
 
+# Copia o entrypoint script
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 # Ajusta permissões para o usuário não-root
 RUN chown -R appuser:appuser /app
 
@@ -33,5 +37,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # Executa como usuário não-root
 USER appuser
 
-# Comando de produção com gunicorn
+# O entrypoint escolhe entre gunicorn puro e newrelic-admin; o CMD continua
+# explicito para que o comando padrao siga visivel e sobrescrevivel.
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["gunicorn", "app.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "60"]
