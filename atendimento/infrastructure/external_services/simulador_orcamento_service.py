@@ -1,5 +1,9 @@
+import logging
 import requests
 from django.conf import settings
+from app.observabilidade.logging import trace_id_var, span_id_var
+
+logger = logging.getLogger(__name__)
 
 
 class SimuladorOrcamentoService:
@@ -47,6 +51,12 @@ class SimuladorOrcamentoService:
 
         headers = {}
 
+        # Propagar W3C Trace Context conforme §5.2
+        trace_id = trace_id_var.get()
+        span_id = span_id_var.get()
+        if trace_id and span_id:
+            headers["traceparent"] = f"00-{trace_id}-{span_id}-01"
+
         if authorization:
             headers["Authorization"] = authorization
 
@@ -60,6 +70,16 @@ class SimuladorOrcamentoService:
 
             response.raise_for_status()
 
+            # Log de sucesso de integração (§5.1)
+            extra = {
+                'integracao': 'simulador-orcamento',
+                'integracao_status': 'sucesso',
+            }
+            logger.info(
+                f"Integração com simulador de orçamento bem-sucedida: OS {ordem_servico_id}",
+                extra=extra
+            )
+
             return response.json()
 
         except requests.exceptions.HTTPError:
@@ -68,6 +88,17 @@ class SimuladorOrcamentoService:
             except ValueError:
                 erro = {"mensagem": response.text}
 
+            # Log de erro HTTP de integração (§5.1)
+            extra = {
+                'integracao': 'simulador-orcamento',
+                'integracao_status': 'erro',
+            }
+            logger.error(
+                f"Erro HTTP na integração com simulador: {response.status_code}",
+                extra=extra,
+                exc_info=True
+            )
+
             return {
                 "erro": True,
                 "status_code": response.status_code,
@@ -75,6 +106,17 @@ class SimuladorOrcamentoService:
             }
 
         except requests.exceptions.RequestException as exc:
+            # Log de erro de conexão de integração (§5.1)
+            extra = {
+                'integracao': 'simulador-orcamento',
+                'integracao_status': 'erro',
+            }
+            logger.error(
+                f"Falha ao comunicar com o webhook: {exc}",
+                extra=extra,
+                exc_info=True
+            )
+
             return {
                 "erro": True,
                 "status_code": 503,
