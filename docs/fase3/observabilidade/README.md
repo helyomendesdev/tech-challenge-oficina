@@ -413,6 +413,31 @@ threads de leitura e depois deixa as OS em andamento fecharem o ciclo, até `--e
 (padrão: o pior caso do ciclo na aceleração escolhida). Um segundo Ctrl+C aborta na hora, e o
 resumo diz quantos ciclos ficaram pela metade — OS abortada no meio vira buraco em D2.
 
+**A aceleração distorce o D2 — não grave o vídeo com valor alto.** O campo
+`duracaoStatusSegundos` mede tempo de parede entre duas transições, e nesse tempo
+está o round-trip HTTP do próprio gerador. O custo é *fixo* (~58 ms medidos), mas
+o valor simulado encolhe com a aceleração, então quanto maior a aceleração, mais
+o overhead domina — e domina primeiro os status curtos, que são justamente os que
+o painel precisa distinguir.
+
+Medido em 2026-08-23 com `--aceleracao 150000`, contra o perfil de permanência
+configurado:
+
+| Status | Esperado | Medido | Excesso |
+|---|---|---|---|
+| `RECEBIDA` | 0,6 h | 3,27 h | +2,67 h (64 ms reais) |
+| `DIAGNOSTICO` | 3,2 h | 5,62 h | +2,37 h (57 ms reais) |
+| `FINALIZADA` | 2,2 h | 4,44 h | +2,19 h (53 ms reais) |
+| `EXECUCAO` | 6,5 h | 8,45 h | +1,95 h (47 ms reais) |
+| `AGUARDANDO` | 9,0 h | 11,80 h | +2,80 h (67 ms reais) |
+
+O excesso real é o mesmo em todos (média 58 ms, contra p50 de 49 ms de latência
+medida), o que confirma a causa. `RECEBIDA` fica 5× acima da faixa configurada.
+
+Para o excesso ficar abaixo de 10% do status mais curto, a aceleração precisa
+ficar **abaixo de ~3750** — e o padrão do gerador é **3600**. Use o padrão para
+gravar; a aceleração alta serve para encher o painel rápido, não para medir.
+
 **Rodar sempre contra homologação.** As falhas de `--falhas` são erros de verdade na aplicação;
 em produção acionariam A1. É o outro lado da regra de filtro de ambiente da §4.
 
