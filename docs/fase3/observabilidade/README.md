@@ -82,9 +82,13 @@ dashboard, chegar na linha de log da requisição que o causou. Isso continua va
 os fluxos.
 
 O que liga um fluxo ao outro, quando a investigação precisa cruzá-los (*"esse cliente não
-conseguiu abrir OS"*), é o `cliente.ref` (§5.1) presente nos dois, mais a janela de tempo.
-Se o grupo quiser um laço forte entre ① e ②, é preciso um `X-Correlation-Id` gerado pelo
-cliente e repassado nas duas chamadas — **decisão em aberto**, não exigida pelo enunciado.
+conseguiu abrir OS"*), é o **`X-Correlation-Id`**: gerado pelo cliente e repassado nas duas
+chamadas, validado e devolvido por Gateway, Lambda e aplicação. **Decidido pelo grupo em
+2026-08-23** (Lucas), a partir da revisão do Hélio no PR #11 — formalizado no ADR-006 (`docs/adrs/`, PR #15).
+
+O `cliente.ref` (§5.1) mais a janela de tempo continuam servindo como laço fraco, para o caso
+de uma requisição chegar sem o header. É laço de última instância: depende de janela de tempo
+e não distingue duas tentativas do mesmo cliente.
 
 O trace de ① só se estende até a aplicação se a Lambda passar a chamá-la (hoje ela vai direto
 ao banco). É para esse caso, e para as chamadas que ela já faz adiante, que existe o requisito
@@ -171,9 +175,11 @@ Regras invioláveis:
    ou a aplicação gera um novo.
 2. Todo componente **propaga** `traceparent` e `tracestate` nas chamadas que faz adiante.
 3. A aplicação expõe um middleware que:
-   - lê `traceparent` e `X-Request-Id` da requisição (gera UUIDv4 se ausente);
+   - lê `traceparent`, `X-Request-Id` e `X-Correlation-Id` da requisição (gera UUIDv4 se
+     ausente);
    - guarda ambos em `contextvars`, para o formatter de log injetar sem passar parâmetro;
-   - devolve `X-Request-Id` no header da resposta, para o cliente citar num suporte.
+   - devolve `X-Request-Id` e `X-Correlation-Id` no header da resposta, para o cliente citar
+     num suporte e para o laço entre os dois fluxos sobreviver.
 4. Chamadas HTTP saintes (ex.: webhook de orçamento) reinjetam os headers.
 
 ### 5.3 Métricas técnicas

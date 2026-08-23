@@ -75,7 +75,11 @@ A ordem será revisada após a escolha da nuvem e a definição das dependência
 Todos os componentes devem fornecer:
 
 - Logs estruturados em JSON.
-- Identificador de correlação propagado entre Gateway, Function e aplicação.
+- **`X-Correlation-Id`** gerado pelo cliente, propagado entre Gateway, Function e
+  aplicação, e devolvido na resposta por todos os três. É o que liga o fluxo de
+  autenticação ao de aplicação — os dois saem do Gateway de forma independente, e o
+  `traceparent` sozinho não os cruza (ver `observabilidade/README.md` §3).
+- `traceparent` / `tracestate` (W3C) para o trace técnico **dentro** de cada fluxo.
 - Métricas de erro, latência e disponibilidade.
 - Healthchecks quando aplicável.
 - Alertas de falha no processamento de ordens de serviço.
