@@ -13,9 +13,12 @@ relogio de verdade, entao a suite leva algumas dezenas de segundos.
 """
 
 import argparse
+import json
 import re
 import threading
 import time
+import urllib.request
+import uuid
 
 import pytest
 
@@ -25,6 +28,7 @@ from atendimento.domain.exceptions import TransicaoStatusInvalidaError
 from scripts.gerar_carga_observabilidade import (
     ESPERA_ABORTO_SEGUNDOS,
     PERMANENCIA_HORAS,
+    ClienteAPI,
     Metricas,
     SimuladorOrdemServico,
     encerrar,
@@ -56,7 +60,7 @@ class APIDublada:
         self._proximo_id = 1000
         self._lock = threading.Lock()
 
-    def chamar(self, metodo, caminho, payload=None, rng=None):
+    def chamar(self, metodo, caminho, payload=None, rng=None, correlation_id=None):
         if self.levantar_excecao:
             raise RuntimeError("Erro simulado na API")
         with self._lock:
@@ -145,6 +149,57 @@ class _MetricasFake:
 
     def registrar_resposta(self, codigo, latencia_ms):
         pass
+
+
+class ClienteAPIComCaptura(ClienteAPI):
+    """ClienteAPI que captura os headers realmente montados antes de enviar.
+
+    Usado para testar que X-Correlation-Id e repassado corretamente entre
+    autenticacao e chamadas de negocio no mesmo ciclo de OS.
+    """
+
+    def __init__(self, base_url: str = "http://localhost:8000", usuario: str = "admin",
+                 senha: str = "admin", metricas: Metricas | None = None,
+                 timeout: int = 20):
+        metricas = metricas or _MetricasFake()
+        super().__init__(base_url, usuario, senha, metricas, timeout)
+        # (metodo, caminho, headers_capturados, payload)
+        self.chamadas_capturadas: list[tuple[str, str, dict, dict | None]] = []
+        self._respostas_por_rota = {}
+
+    def _enviar(self, metodo: str, caminho: str, payload=None,
+                autenticado: bool = True, rng=None, correlation_id: str | None = None):
+        """Captura headers e responde com dados fake."""
+        # Monta headers como o original faria
+        headers = {}
+        headers["Content-Type"] = "application/json"
+        headers["Accept"] = "application/json"
+        gerador = rng or random
+        headers["traceparent"] = gerar_traceparent(gerador)
+        headers["X-Request-Id"] = str(uuid.uuid4())
+        if correlation_id:
+            headers["X-Correlation-Id"] = correlation_id
+        if autenticado and self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+
+        # Captura a chamada
+        with self._lock:
+            self.chamadas_capturadas.append((metodo, caminho, headers.copy(), payload))
+
+        # Retorna respostas fake baseadas na rota
+        if caminho == ROTA_ABERTURA:
+            id_nova = len([p for _, c, _, p in self.chamadas_capturadas if c == ROTA_ABERTURA]) + 1000
+            return 201, {"ordem_servico_id": id_nova}, 1.0
+        elif caminho == "/api/token/":
+            with self._lock:
+                self._token = "token-fake"
+            return 200, {"access": "token-fake"}, 1.0
+        elif caminho == ROTA_STATUS:
+            return 200, {}, 1.0
+        elif caminho == ROTA_ORCAMENTO:
+            return 200, {}, 1.0
+        else:
+            return 200, {}, 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +520,7 @@ class APIParaMain:
     def autenticar(self):
         return None
 
-    def chamar(self, metodo, caminho, payload=None, rng=None):
+    def chamar(self, metodo, caminho, payload=None, rng=None, correlation_id=None):
         if self.levantar_excecao:
             raise RuntimeError("quebra sintetica dentro do ciclo da OS")
         with self._lock:
@@ -530,3 +585,212 @@ def test_main_devolve_codigo_de_erro_quando_o_ciclo_quebra(monkeypatch):
     ], api)
 
     assert codigo == 2, "excecao no worker tem de virar codigo de saida diferente de zero"
+
+
+# ---------------------------------------------------------------------------
+# X-Correlation-Id (tarefas 6 e 7)
+# ---------------------------------------------------------------------------
+
+def test_autenticacao_e_chamada_de_negocio_compartilham_correlation_id(monkeypatch):
+    """Autenticacao e chamada de negocio relacionada saem com o mesmo X-Correlation-Id.
+
+    Testa o caso onde o token expira (401) durante o ciclo: a reautenticacao
+    e a chamada refazida tem o mesmo correlation_id. O duble intercepta
+    urllib.request.urlopen para capturar o Request real sem remontar headers.
+    """
+    from io import BytesIO
+    from urllib.error import HTTPError
+    from unittest.mock import Mock
+
+    requisicoes_capturadas = []
+
+    def urlopen_fake(request, *args, **kwargs):
+        """Captura Request real e retorna respostas fake."""
+        # Captura o Request real com seus headers
+        headers_capturados = dict(request.headers)
+        requisicoes_capturadas.append({
+            'url': request.full_url,
+            'headers': headers_capturados,
+        })
+
+        # Retorna respostas fake baseadas na rota
+        if "/api/token/" in request.full_url:
+            resposta = Mock()
+            resposta.status = 200
+            resposta.read = lambda: b'{"access": "token-fake"}'
+            resposta.__enter__ = lambda s: s
+            resposta.__exit__ = lambda s, *a: None
+            return resposta
+        elif ROTA_STATUS in request.full_url:
+            # Primeira tentativa: 401; segunda: 200
+            tentativas = len([r for r in requisicoes_capturadas if ROTA_STATUS in r['url']])
+            if tentativas == 1:
+                raise HTTPError(request.full_url, 401, "Unauthorized", {}, BytesIO(b'{}'))
+            else:
+                resposta = Mock()
+                resposta.status = 200
+                resposta.read = lambda: b'{}'
+                resposta.__enter__ = lambda s: s
+                resposta.__exit__ = lambda s, *a: None
+                return resposta
+        else:
+            resposta = Mock()
+            resposta.status = 201
+            resposta.read = lambda: b'{"ordem_servico_id": 1001}'
+            resposta.__enter__ = lambda s: s
+            resposta.__exit__ = lambda s, *a: None
+            return resposta
+
+    monkeypatch.setattr(urllib.request, 'urlopen', urlopen_fake)
+
+    api = ClienteAPI("http://localhost:9999", "admin", "admin", _MetricasFake())
+
+    # Executa as chamadas
+    correlation_id_teste = str(uuid.uuid4())
+    try:
+        api.autenticar(correlation_id=correlation_id_teste)
+        api.chamar("POST", "/api/v1/ordens-servico/abrir/",
+                   {"cliente": {}, "veiculo": {}, "servicos": [], "pecas": []},
+                   correlation_id=correlation_id_teste)
+        api.chamar("POST", ROTA_STATUS,
+                   {"ordem_servico_id": 1001, "novo_status": "DIAGNOSTICO"},
+                   correlation_id=correlation_id_teste)
+    except (urllib.request.URLError, OSError):
+        pass  # esperado, URL fake
+
+    # Extrai autenticacoes e transicoes
+    autenticacoes = [r for r in requisicoes_capturadas if "/api/token/" in r['url']]
+    transicoes = [r for r in requisicoes_capturadas if ROTA_STATUS in r['url']]
+
+    assert autenticacoes, "nenhuma chamada de autenticacao capturada"
+    assert len(transicoes) >= 2, f"esperava 2+ transicoes, encontrou {len(transicoes)}"
+
+    # Helper para busca case-insensitive
+    def get_header(headers, name):
+        name_lower = name.lower()
+        for k, v in headers.items():
+            if k.lower() == name_lower:
+                return v
+        return None
+
+    # Valida presenca do header em todas as chamadas
+    for i, auth in enumerate(autenticacoes):
+        cid = get_header(auth["headers"], "X-Correlation-Id")
+        assert cid, f"autenticacao {i} nao tem X-Correlation-Id ou vazio"
+
+    for i, trans in enumerate(transicoes):
+        cid = get_header(trans["headers"], "X-Correlation-Id")
+        assert cid, f"transicao {i} nao tem X-Correlation-Id ou vazio"
+
+    # Reauth compartilha correlation_id com transicao
+    auth_cid = get_header(autenticacoes[-1]["headers"], "X-Correlation-Id")
+    trans_cid = get_header(transicoes[0]["headers"], "X-Correlation-Id")
+    assert auth_cid == trans_cid, (
+        "autenticacao (reauth em 401) deve compartilhar X-Correlation-Id com transicao"
+    )
+
+
+def test_ciclos_de_os_diferentes_usam_correlation_id_diferente():
+    """Cada ciclo de OS tem seu prprio X-Correlation-Id."""
+    api = ClienteAPIComCaptura()
+
+    correlation_ids = set()
+    for semente in range(5):
+        api.chamadas_capturadas.clear()
+        simulador = SimuladorOrdemServico(
+            api=api,
+            config=configuracao(),
+            metricas=_MetricasFake(),
+            rng=random.Random(semente),
+            clientes_conhecidos=[],
+            lock_clientes=threading.Lock(),
+            parar=threading.Event(),
+        )
+        # Roda o ciclo completo
+        simulador.executar()
+
+        # Extrai o correlation_id desta OS
+        chamadas_desta_os = [
+            headers for _, _, headers, _ in api.chamadas_capturadas
+            if headers.get("X-Correlation-Id")
+        ]
+        if chamadas_desta_os:
+            correlation_id = chamadas_desta_os[0].get("X-Correlation-Id")
+            correlation_ids.add(correlation_id)
+
+    assert len(correlation_ids) == 5, (
+        f"5 ciclos de OS deveriam gerar 5 correlation_ids diferentes, "
+        f"encontrou {len(correlation_ids)} unicos: {correlation_ids}"
+    )
+
+
+def test_todas_as_chamadas_do_ciclo_compartilham_correlation_id():
+    """Todas as chamadas de um mesmo ciclo de OS compartilham X-Correlation-Id.
+
+    Valida que abertura, transicoes, orcamento e falhas injetadas dentro
+    de um ciclo usam o mesmo correlation_id — nao apenas que ciclos
+    diferentes tem ids diferentes.
+    """
+    api = ClienteAPIComCaptura()
+
+    simulador = SimuladorOrdemServico(
+        api=api,
+        config=configuracao(),
+        metricas=_MetricasFake(),
+        rng=random.Random(42),
+        clientes_conhecidos=[],
+        lock_clientes=threading.Lock(),
+        parar=threading.Event(),
+    )
+    simulador.executar()
+
+    # Extrai todos os correlation_ids capturados neste ciclo
+    chamadas_do_ciclo = [
+        headers for _, _, headers, _ in api.chamadas_capturadas
+        if headers.get("X-Correlation-Id")
+    ]
+
+    assert chamadas_do_ciclo, "nenhuma chamada com X-Correlation-Id capturada"
+
+    # Todos os ids devem ser iguais (mesmo ciclo)
+    ids_unicos = {
+        headers.get("X-Correlation-Id")
+        for headers in chamadas_do_ciclo
+    }
+
+    assert len(ids_unicos) == 1, (
+        f"ciclo unico deveria ter 1 correlation_id, encontrou {len(ids_unicos)}: {ids_unicos}"
+    )
+
+
+def test_correlation_id_no_formato_uuid4():
+    """X-Correlation-Id segue o formato de UUIDv4 (versao 4 especificamente)."""
+    api = ClienteAPIComCaptura()
+    simulador = SimuladorOrdemServico(
+        api=api,
+        config=configuracao(),
+        metricas=_MetricasFake(),
+        rng=random.Random(99),
+        clientes_conhecidos=[],
+        lock_clientes=threading.Lock(),
+        parar=threading.Event(),
+    )
+    simulador.executar()
+
+    correlation_ids = {
+        headers.get("X-Correlation-Id")
+        for _, _, headers, _ in api.chamadas_capturadas
+        if headers.get("X-Correlation-Id")
+    }
+
+    assert correlation_ids, "nenhum X-Correlation-Id foi capturado"
+
+    # Valida que todos os IDs sao UUIDv4
+    for cid in correlation_ids:
+        try:
+            parsed_uuid = uuid.UUID(cid)
+            assert parsed_uuid.version == 4, (
+                f"X-Correlation-Id '{cid}' nao e UUIDv4 (versao: {parsed_uuid.version})"
+            )
+        except (ValueError, TypeError):
+            pytest.fail(f"X-Correlation-Id '{cid}' nao e um UUID valido")

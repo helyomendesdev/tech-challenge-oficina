@@ -205,11 +205,12 @@ class ClienteAPI:
 
     # -- autenticacao -------------------------------------------------------
 
-    def autenticar(self) -> None:
+    def autenticar(self, correlation_id: str | None = None) -> None:
         codigo, corpo, _ = self._enviar(
             "POST", "/api/token/",
             {"username": self.usuario, "password": self.senha},
             autenticado=False,
+            correlation_id=correlation_id,
         )
         if codigo != 200 or not isinstance(corpo, dict) or "access" not in corpo:
             raise RuntimeError(
@@ -227,7 +228,8 @@ class ClienteAPI:
     # -- transporte ---------------------------------------------------------
 
     def _enviar(self, metodo: str, caminho: str, payload=None,
-                autenticado: bool = True, rng: random.Random | None = None):
+                autenticado: bool = True, rng: random.Random | None = None,
+                correlation_id: str | None = None):
         url = f"{self.base_url}{caminho}"
         dados = json.dumps(payload).encode() if payload is not None else None
         requisicao = urllib.request.Request(url, data=dados, method=metodo)
@@ -237,6 +239,8 @@ class ClienteAPI:
         gerador = rng or random
         requisicao.add_header("traceparent", gerar_traceparent(gerador))
         requisicao.add_header("X-Request-Id", str(uuid.uuid4()))
+        if correlation_id:
+            requisicao.add_header("X-Correlation-Id", correlation_id)
         if autenticado and self.token:
             requisicao.add_header("Authorization", f"Bearer {self.token}")
 
@@ -262,12 +266,14 @@ class ClienteAPI:
         return codigo, corpo, latencia
 
     def chamar(self, metodo: str, caminho: str, payload=None,
-               rng: random.Random | None = None):
+               rng: random.Random | None = None, correlation_id: str | None = None):
         """Envia a requisicao e reautentica uma vez se o token expirou."""
-        codigo, corpo, latencia = self._enviar(metodo, caminho, payload, rng=rng)
+        codigo, corpo, latencia = self._enviar(metodo, caminho, payload, rng=rng,
+                                               correlation_id=correlation_id)
         if codigo == 401:
-            self.autenticar()
-            codigo, corpo, latencia = self._enviar(metodo, caminho, payload, rng=rng)
+            self.autenticar(correlation_id=correlation_id)
+            codigo, corpo, latencia = self._enviar(metodo, caminho, payload, rng=rng,
+                                                   correlation_id=correlation_id)
         return codigo, corpo, latencia
 
 
@@ -292,6 +298,9 @@ class SimuladorOrdemServico:
         # A unidade e da OS, nao da transicao: um carro nao troca de oficina no
         # meio do reparo. Sorteada uma vez, vale para todo o ciclo.
         self.unidade = rng.choice(config.unidades)
+        # A correlacao e da OS tambem: autenticacao e chamada de negocio relacionada
+        # saem com o mesmo X-Correlation-Id. Sorteada uma vez no ciclo.
+        self.correlation_id = str(uuid.uuid4())
 
     # -- utilitarios --------------------------------------------------------
 
@@ -324,6 +333,7 @@ class SimuladorOrdemServico:
                 "observacao": "Trafego sintetico para observabilidade.",
             },
             rng=self.rng,
+            correlation_id=self.correlation_id,
         )
         if codigo == 200:
             self.metricas.registrar("transicoes_ok")
@@ -350,6 +360,7 @@ class SimuladorOrdemServico:
                 "motivo": motivo,
             },
             rng=self.rng,
+            correlation_id=self.correlation_id,
         )
         if codigo == 200 and "erro" not in corpo:
             self.metricas.registrar("transicoes_ok")
@@ -384,12 +395,14 @@ class SimuladorOrdemServico:
                     "observacao": "Transicao deliberadamente invalida.",
                 },
                 rng=self.rng,
+                correlation_id=self.correlation_id,
             )
         elif modo == "os_inexistente":
             inexistente = self.rng.randint(900_000, 999_999)
             self.api.chamar(
                 "GET", f"/api/v1/ordens-servico/{inexistente}/status/",
                 rng=self.rng,
+                correlation_id=self.correlation_id,
             )
         else:
             # /simulacao/orcamento/ dispara chamada HTTP saindo da aplicacao:
@@ -402,6 +415,7 @@ class SimuladorOrdemServico:
                     "motivo": "Decisao fora do estado AGUARDANDO.",
                 },
                 rng=self.rng,
+                correlation_id=self.correlation_id,
             )
 
     # -- ciclo completo -----------------------------------------------------
@@ -412,6 +426,7 @@ class SimuladorOrdemServico:
             "POST", "/api/v1/ordens-servico/abrir/",
             {"cliente": cliente, "veiculo": veiculo, "servicos": [], "pecas": []},
             rng=self.rng,
+            correlation_id=self.correlation_id,
         )
         if codigo != 201 or "ordem_servico_id" not in corpo:
             self.metricas.registrar("erros_inesperados")
@@ -496,6 +511,9 @@ def trafego_de_leitura(api: ClienteAPI, config: argparse.Namespace,
     presa nestas threads (que rodam em laco infinito). `parar` e o aborto geral.
     """
     while not parar_leitura.is_set() and not parar.is_set():
+        # Trafego de leitura nao tem ciclo de OS nem correlacao com nenhuma chamada
+        # de negocio de escrita, entao nao passa correlation_id: nenhuma leitura
+        # carrega X-Correlation-Id.
         api.chamar("GET", "/api/v1/ordens-servico/fila/", rng=rng)
         if parar_leitura.wait(rng.uniform(1.0, 4.0)):
             return
