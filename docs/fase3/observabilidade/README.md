@@ -82,9 +82,12 @@ dashboard, chegar na linha de log da requisição que o causou. Isso continua va
 os fluxos.
 
 O que liga um fluxo ao outro, quando a investigação precisa cruzá-los (*"esse cliente não
-conseguiu abrir OS"*), é o **`X-Correlation-Id`**: gerado pelo cliente e repassado nas duas
-chamadas, validado e devolvido por Gateway, Lambda e aplicação. **Decidido pelo grupo em
-2026-08-23** (Lucas), a partir da revisão do Hélio no PR #11 — formalizado no ADR-006 (`docs/adrs/`, PR #15).
+conseguiu abrir OS"*), é o **`X-Correlation-Id`**: enviado pelo cliente nas duas chamadas e
+**encaminhado sem modificação pelo API Gateway**; quem **valida, gera quando falta e devolve
+o valor na resposta** são a Lambda e a aplicação — é do valor devolvido que o cliente que não
+gerou nada tira o que reusar na segunda chamada. **Decidido pelo grupo em 2026-08-23** (Lucas),
+a partir da revisão do Hélio no PR #11, com a divisão de responsabilidade acertada em
+2026-08-24 — formalizado no ADR-006 (`docs/adrs/`, PR #15).
 
 O `cliente.ref` (§5.1) mais a janela de tempo continuam servindo como laço fraco, para o caso
 de uma requisição chegar sem o header. É laço de última instância: depende de janela de tempo
@@ -171,15 +174,17 @@ Regras invioláveis:
 
 ### 5.2 Correlação entre requisições
 
-1. O API Gateway repassa o header `traceparent` recebido do cliente; se não houver, a Lambda
-   ou a aplicação gera um novo.
+1. O API Gateway **encaminha, sem modificar**, os headers `traceparent`, `tracestate`,
+   `X-Request-Id` e `X-Correlation-Id` recebidos do cliente; se algum não vier, quem gera é a
+   Lambda ou a aplicação — o Gateway não valida nem gera nenhum deles.
 2. Todo componente **propaga** `traceparent` e `tracestate` nas chamadas que faz adiante.
 3. A aplicação expõe um middleware que:
    - lê `traceparent`, `X-Request-Id` e `X-Correlation-Id` da requisição (gera UUIDv4 se
      ausente);
    - guarda ambos em `contextvars`, para o formatter de log injetar sem passar parâmetro;
    - devolve `X-Request-Id` e `X-Correlation-Id` no header da resposta, para o cliente citar
-     num suporte e para o laço entre os dois fluxos sobreviver.
+     num suporte e para o laço entre os dois fluxos sobreviver. A Lambda faz o mesmo (L9b de
+     `requisitos-para-o-time.md`): sem o valor de volta, o cliente não tem o que reusar.
 4. Chamadas HTTP saintes (ex.: webhook de orçamento) reinjetam os headers.
 
 ### 5.3 Métricas técnicas
@@ -342,7 +347,13 @@ Estas entram como PR no repositório `tech-challenge-oficina`:
 2. `app/observabilidade/logging.py` — formatter JSON + filtro que injeta `trace.id`,
    `span.id`, `request.id` a partir de `contextvars`.
 3. `app/observabilidade/middleware.py` — `CorrelationIdMiddleware` (§5.2), registrado como o
-   **primeiro** item de `MIDDLEWARE`.
+   **primeiro** item de `MIDDLEWARE`. É ele que cumpre a parte da **aplicação** no contrato de
+   `X-Correlation-Id` (L9b de `requisitos-para-o-time.md`), e são quatro coisas, não uma:
+   **aceitar** o header do cliente, **gerar** um UUIDv4 quando vier ausente ou inválido,
+   **registrar** em `correlation.id` no log de cada requisição, e **devolver** o valor no header
+   da resposta. O mesmo vale para `X-Request-Id`. Sem o item "devolver", o cliente que não gerou
+   o valor não tem o que reusar na segunda chamada e o laço entre os dois fluxos não fecha —
+   então o L9 não se resolve só no Gateway e na Lambda.
 4. `app/settings.py` — substituir o bloco `LOGGING` atual (formato texto, `FileHandler` +
    console) por handler único de `stdout` com o formatter JSON. **O `FileHandler` sai** (D-06).
 5. `atendimento/infrastructure/external_services/` — propagar `traceparent` nas chamadas
