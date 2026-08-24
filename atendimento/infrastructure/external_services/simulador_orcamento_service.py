@@ -1,7 +1,7 @@
 import logging
 import requests
 from django.conf import settings
-from app.observabilidade.logging import trace_id_var, span_id_var
+from app.observabilidade.logging import trace_id_var, span_id_var, correlation_id_var, tracestate_var
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,20 @@ class SimuladorOrcamentoService:
         # Propagar W3C Trace Context conforme §5.2
         trace_id = trace_id_var.get()
         span_id = span_id_var.get()
+        correlation_id = correlation_id_var.get()
+        tracestate = tracestate_var.get()
         if trace_id and span_id:
             headers["traceparent"] = f"00-{trace_id}-{span_id}-01"
+
+        # tracestate e opaco: so propaga o que foi recebido do chamador,
+        # nunca fabrica um valor novo -- o agente New Relic tambem guarda
+        # estado de vendor nesse header, e sobrescrever atropelaria isso.
+        if tracestate:
+            headers["tracestate"] = tracestate
+
+        # Propagar X-Correlation-Id conforme §5.2
+        if correlation_id:
+            headers["X-Correlation-Id"] = correlation_id
 
         if authorization:
             headers["Authorization"] = authorization

@@ -5,14 +5,44 @@ Implementa W3C Trace Context (traceparent/tracestate) conforme §5.2 da especifi
 de observabilidade, gerenciando trace.id, span.id e request.id via contextvars.
 """
 
+import logging
+import time
 import uuid
-from typing import Callable
+from typing import Callable, Optional
 from django.http import HttpRequest, HttpResponse
 from django.utils.deprecation import MiddlewareMixin
 
 from app.observabilidade.logging import (
     set_trace_context, clear_trace_context, trace_id_var, span_id_var, request_id_var
 )
+
+logger = logging.getLogger('atendimento.observabilidade.requisicao')
+
+
+def _correlation_id_valido(valor: str) -> Optional[str]:
+    """Valida X-Correlation-Id como UUIDv4 estrito, sem normalizar o retorno.
+
+    ``uuid.UUID(valor, version=4)`` forca os bits de versao/variante no
+    resultado -- se o valor recebido ja nao era um UUIDv4 valido, o
+    round-trip para string (sempre em minusculas) diverge do valor
+    recebido em minusculas, e e essa divergencia que a comparacao abaixo
+    detecta. Qualquer string que nao seja um UUID bem formado cai no
+    ValueError.
+
+    A validacao e case-insensitive, mas o retorno preserva o caso exato
+    que o cliente enviou -- quem gera o UUID do outro lado pode comparar
+    por igualdade de string, e devolver normalizado quebraria isso em
+    silencio.
+    """
+    if not valor:
+        return None
+    try:
+        uuid_obj = uuid.UUID(valor, version=4)
+    except (ValueError, AttributeError, TypeError):
+        return None
+    if str(uuid_obj) != valor.lower():
+        return None
+    return valor
 
 
 class CorrelationIdMiddleware(MiddlewareMixin):
@@ -38,6 +68,9 @@ class CorrelationIdMiddleware(MiddlewareMixin):
         Args:
             request: Objeto HttpRequest do Django
         """
+        # Marca o inicio do processamento para medir duration_ms na resposta.
+        request._observabilidade_inicio = time.monotonic()
+
         # W3C Trace Context: formato 00-traceId-spanId-flags
         # https://www.w3.org/TR/trace-context/
         traceparent = request.headers.get('traceparent', '')
@@ -68,14 +101,31 @@ class CorrelationIdMiddleware(MiddlewareMixin):
         if not request_id:
             request_id = str(uuid.uuid4())
 
+        # X-Correlation-Id: so aceita UUIDv4 estrito vindo do cliente; valor
+        # recusado nunca chega ao contextvar, ao log ou a resposta -- gera-se
+        # um novo UUIDv4 no lugar.
+        correlation_id = _correlation_id_valido(request.headers.get('X-Correlation-Id', ''))
+        if not correlation_id:
+            correlation_id = str(uuid.uuid4())
+
+        # tracestate: opaco, so propaga o que o chamador mandou -- nunca se
+        # fabrica um valor aqui. Ausente fica None, e nada e escrito por cima
+        # do que um vendor (ex.: o agente New Relic) possa depender ali.
+        tracestate = request.headers.get('tracestate') or None
+
         # Guardar em contextvars para acesso em logs
-        set_trace_context(trace_id=trace_id, span_id=span_id, request_id=request_id)
+        set_trace_context(
+            trace_id=trace_id, span_id=span_id, request_id=request_id,
+            correlation_id=correlation_id, tracestate=tracestate,
+        )
 
         # Attachar ao request object para acesso posterior se necessário
         request.trace_id = trace_id
         request.span_id = span_id
         request.parent_span_id = parent_span_id
         request.request_id = request_id
+        request.correlation_id = correlation_id
+        request.tracestate = tracestate
 
     def process_response(self, request: HttpRequest, response: HttpResponse) -> HttpResponse:
         """
@@ -92,12 +142,40 @@ class CorrelationIdMiddleware(MiddlewareMixin):
         if hasattr(request, 'request_id'):
             response['X-Request-Id'] = request.request_id
 
+        # Devolver X-Correlation-Id no header da resposta
+        if hasattr(request, 'correlation_id'):
+            response['X-Correlation-Id'] = request.correlation_id
+
         # Devolver traceparent formatado conforme W3C
         if hasattr(request, 'trace_id') and hasattr(request, 'span_id'):
             traceparent = f"00-{request.trace_id}-{request.span_id}-01"
             response['traceparent'] = traceparent
 
+        self._logar_requisicao(request, response)
+
         return response
+
+    def _logar_requisicao(self, request: HttpRequest, response: HttpResponse) -> None:
+        """Emite uma linha de log por requisicao, com correlation.id no contexto."""
+        duration_ms = None
+        inicio = getattr(request, '_observabilidade_inicio', None)
+        if inicio is not None:
+            duration_ms = round((time.monotonic() - inicio) * 1000, 2)
+
+        resolver_match = getattr(request, 'resolver_match', None)
+        rota = getattr(resolver_match, 'route', None) if resolver_match else None
+        if not rota:
+            rota = request.path
+
+        logger.info(
+            'Requisicao processada',
+            extra={
+                'http_method': request.method,
+                'http_route': rota,
+                'http_status_code': response.status_code,
+                'duration_ms': duration_ms,
+            },
+        )
 
     def process_exception(self, request: HttpRequest, exception: Exception) -> None:
         """

@@ -19,10 +19,12 @@ try:  # o agente e opcional: a app roda e a suite passa sem o pacote instalado
 except Exception:  # pragma: no cover - depende do ambiente, nao da logica
     _metadados_do_agente = None
 
-# ContextVars para armazenar trace, span e request ID
+# ContextVars para armazenar trace, span, request ID, correlation ID e tracestate
 trace_id_var: ContextVar[Optional[str]] = ContextVar('trace_id', default=None)
 span_id_var: ContextVar[Optional[str]] = ContextVar('span_id', default=None)
 request_id_var: ContextVar[Optional[str]] = ContextVar('request_id', default=None)
+correlation_id_var: ContextVar[Optional[str]] = ContextVar('correlation_id', default=None)
+tracestate_var: ContextVar[Optional[str]] = ContextVar('tracestate', default=None)
 
 
 def cliente_ref(cpf: str) -> str:
@@ -99,6 +101,7 @@ class JSONFormatter(logging.Formatter):
         # Injetar trace.id e span.id: agente New Relic primeiro, contextvars depois
         trace_id, span_id = _trace_e_span()
         request_id = request_id_var.get()
+        correlation_id = correlation_id_var.get()
 
         if trace_id:
             log_data['trace.id'] = trace_id
@@ -106,6 +109,8 @@ class JSONFormatter(logging.Formatter):
             log_data['span.id'] = span_id
         if request_id:
             log_data['request.id'] = request_id
+        if correlation_id:
+            log_data['correlation.id'] = correlation_id
 
         # Adicionar campos HTTP se presentes no registro
         if hasattr(record, 'http_method'):
@@ -158,7 +163,8 @@ def get_trace_context() -> dict:
 
 
 def set_trace_context(trace_id: Optional[str] = None, span_id: Optional[str] = None,
-                      request_id: Optional[str] = None):
+                      request_id: Optional[str] = None, correlation_id: Optional[str] = None,
+                      tracestate: Optional[str] = None):
     """
     Define o contexto de trace (usar em middleware).
 
@@ -166,6 +172,8 @@ def set_trace_context(trace_id: Optional[str] = None, span_id: Optional[str] = N
         trace_id: ID do trace (W3C format)
         span_id: ID do span (W3C format)
         request_id: ID único da requisição
+        correlation_id: ID de correlação (X-Correlation-Id)
+        tracestate: tracestate W3C recebido do chamador, para propagar adiante
     """
     if trace_id:
         trace_id_var.set(trace_id)
@@ -173,6 +181,10 @@ def set_trace_context(trace_id: Optional[str] = None, span_id: Optional[str] = N
         span_id_var.set(span_id)
     if request_id:
         request_id_var.set(request_id)
+    if correlation_id:
+        correlation_id_var.set(correlation_id)
+    if tracestate:
+        tracestate_var.set(tracestate)
 
 
 def clear_trace_context():
@@ -185,3 +197,5 @@ def clear_trace_context():
     trace_id_var.set(None)
     span_id_var.set(None)
     request_id_var.set(None)
+    correlation_id_var.set(None)
+    tracestate_var.set(None)
