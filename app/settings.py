@@ -48,6 +48,7 @@ INSTALLED_APPS = [
 # ---------------------------------------------------------------------------
 
 MIDDLEWARE = [
+    'app.observabilidade.middleware.CorrelationIdMiddleware',  # Correlação de requisições (primeiro)
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'csp.middleware.CSPMiddleware',           # Content Security Policy
@@ -249,38 +250,41 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
 
 # ---------------------------------------------------------------------------
-# Logging — L4: caminho absoluto para funcionar dentro do Docker
+# Observabilidade
+# ---------------------------------------------------------------------------
+
+SERVICE_NAME = config('SERVICE_NAME', default='oficina-api')
+SERVICE_ENVIRONMENT = config('SERVICE_ENVIRONMENT', default='dev')
+SERVICE_VERSION = config('SERVICE_VERSION', default='1.0.0')
+OBSERVABILIDADE_SALT = config('OBSERVABILIDADE_SALT', default='dev-salt-unsecure')
+
+# ---------------------------------------------------------------------------
+# Logging — JSON estruturado para stdout (D-06: sem FileHandler)
 # ---------------------------------------------------------------------------
 
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
+        'json': {
+            '()': 'app.observabilidade.logging.JSONFormatter',
         },
     },
     'handlers': {
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': os.environ.get('DJANGO_LOG_FILE', str(BASE_DIR / 'oficina_atividades.log')),
-            'formatter': 'verbose',
-        },
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'json',
+            'stream': 'ext://sys.stdout',
         },
     },
     'loggers': {
         'django': {
-            'handlers': ['file', 'console'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
         'atendimento': {
-            'handlers': ['file', 'console'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
