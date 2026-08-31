@@ -86,7 +86,73 @@ regiões.
 
 ---
 
-## 2. Rodar localmente com APM
+## 2. Gerar e aplicar o salt de pseudonimização (`OBSERVABILIDADE_SALT`)
+
+`cliente.ref` (§5.1 do [README da frente](README.md)) é um hash do CPF com este
+salt. Com o mesmo salt em dois ambientes, o mesmo CPF produz o mesmo hash em
+homologação e produção, e o pseudônimo vira um identificador estável —
+reversível por quem tiver uma lista de CPFs para comparar. Por isso o salt
+**precisa ser diferente por ambiente**, e vem sempre de Secret, nunca de
+ConfigMap nem de arquivo versionado.
+
+### Gerar um valor
+
+Mesmo gerador que o `kind-deploy.sh`/`kind-deploy.ps1` já usa para
+`DJANGO_SECRET_KEY`:
+
+```bash
+python -c 'import secrets; print(secrets.token_urlsafe(48))'
+```
+
+```powershell
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Gere um valor novo por ambiente — local, homologação e produção usam três
+salts diferentes entre si, nunca o mesmo valor copiado de um para o outro.
+
+### Onde ele vive
+
+| Ambiente | Onde | Como |
+|---|---|---|
+| Local | `.env` (não versionado) | `OBSERVABILIDADE_SALT=<valor gerado>` — o `.env.example` já traz a variável comentada |
+| Cluster | Secret `oficina-secret` | ver comando abaixo |
+
+No cluster, a variável entra no mesmo Secret `oficina-secret` que o
+`deployment.yaml` já injeta via `envFrom: secretRef` — não crie um Secret à
+parte, como se faz para a license key do New Relic no passo 5.1. O
+`kind-deploy.sh`/`kind-deploy.ps1` não gera `OBSERVABILIDADE_SALT` sozinho —
+só cuida de `DJANGO_SECRET_KEY` e das credenciais do Postgres —, então este
+passo é manual e roda **depois** do deploy inicial já ter criado o Secret:
+
+```bash
+kubectl patch secret oficina-secret \
+  --namespace oficina \
+  --type merge \
+  -p "{\"stringData\":{\"OBSERVABILIDADE_SALT\":\"$OBSERVABILIDADE_SALT\"}}"
+```
+
+Passe o valor por variável de ambiente, nunca digitado no comando — o
+histórico do shell guarda o que você digita.
+
+### Se faltar
+
+Em ambiente **não local**, faltar `OBSERVABILIDADE_SALT` não é um modo de uso
+válido — diferente da license key do New Relic. A aplicação **não sobe**: a
+inicialização falha com `ImproperlyConfigured`. Se o pod não fica `Ready` e o
+log de erro cita essa exceção, o suspeito é este passo, não o deploy em si.
+
+### Rotação
+
+Trocar o salt muda o hash de **todo** CPF de uma vez. O `cliente.ref` gravado
+antes da rotação deixa de bater com o `cliente.ref` gerado depois para o mesmo
+cliente — eventos e logs antigos param de correlacionar com os novos.
+Rotacione só quando o motivo justificar perder essa correlação (ex.: suspeita
+de vazamento do salt), nunca como manutenção de rotina.
+
+---
+
+## 3. Rodar localmente com APM
 
 O `.env` é o único lugar onde a chave entra:
 
@@ -116,7 +182,7 @@ log) continua funcionando. É assim que quem não é desta frente roda o projeto
 
 ---
 
-## 3. Gerar tráfego
+## 4. Gerar tráfego
 
 Sem histórico, o dashboard aparece vazio na hora de gravar o vídeo. O gerador
 existe para isso:
@@ -140,12 +206,12 @@ Detalhes na §9.1 do [README da frente](README.md).
 
 ---
 
-## 4. Cluster local (kind)
+## 5. Cluster local (kind)
 
 O `scripts/kind-deploy.sh` já sobe cluster, banco, migration e aplicação. Para a
 observabilidade faltam duas coisas.
 
-### 4.1 Secret da licença
+### 5.1 Secret da licença
 
 O `deployment.yaml` referencia o secret `newrelic-license` como **opcional**, então
 o cluster sobe sem ele. Para ligar o APM:
@@ -160,7 +226,7 @@ kubectl create secret generic newrelic-license \
 Passe a chave por variável de ambiente, nunca digitada no comando — o histórico do
 shell guarda o que você digita.
 
-### 4.2 Integração de Kubernetes (`nri-bundle`)
+### 5.2 Integração de Kubernetes (`nri-bundle`)
 
 É o que entrega CPU, memória, HPA e reinícios por pod (§5.3), **sem** instrumentar
 código. Instalação por Helm; confira os parâmetros na documentação da ferramenta
@@ -178,7 +244,7 @@ O que precisa ficar verdadeiro ao final:
 
 ---
 
-## 5. Conferir que chegou
+## 6. Conferir que chegou
 
 Antes de montar painel, confirme que o dado existe:
 
@@ -199,7 +265,7 @@ Se o evento de negócio não aparece **e** não há erro, o suspeito é o logger
 
 ---
 
-## 6. Ordem que economiza retrabalho
+## 7. Ordem que economiza retrabalho
 
 1. Conta criada e chave em mãos
 2. Aplicação instrumentada localmente, com trace e log chegando
