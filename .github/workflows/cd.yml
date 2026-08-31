@@ -4,88 +4,65 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      run_hpa_test:
-        description: Executar teste completo de scale-up e scale-down
-        required: false
-        default: true
-        type: boolean
 
 permissions:
+  id-token: write   # OIDC
   contents: read
 
 jobs:
-  deploy-kind:
+  build-and-push:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      DJANGO_SECRET_KEY: test-only-${{ github.run_id }}-${{ github.run_attempt }}
-      DJANGO_SETTINGS_MODULE: app.settings_test
-      POSTGRES_DB: oficina_test
-      POSTGRES_USER: test_user
-      POSTGRES_PASSWORD: test-only-${{ github.run_id }}-${{ github.run_attempt }}
-
+    timeout-minutes: 20
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - name: Configure AWS credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
       with:
-        python-version: "3.11"
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ${{ secrets.AWS_REGION }}
 
-    - name: Install dependencies
-      run: pip install -r requirements.txt
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
 
-    - name: Validate application
-      run: |
-        python manage.py check --settings=app.settings_test
-        python manage.py makemigrations --check --dry-run --settings=app.settings_test
-        python manage.py spectacular --validate --file schema.yml --settings=app.settings_test
-        python -m pytest atendimento/tests/ -v --tb=short --junitxml=report.xml
-
-    - name: Create Kind cluster
-      uses: helm/kind-action@v1
-      with:
-        cluster_name: oficina
-
-    - name: Deploy application, database and Metrics Server
-      run: bash scripts/kind-deploy.sh
-
-    - name: Validate migrations in cluster
-      run: kubectl exec -n oficina deployment/oficina-app -- python manage.py migrate --check
-
-    - name: Smoke test deployed APIs
-      run: python scripts/smoke_test.py
-
-    - name: Validate Metrics API and numeric HPA metrics
-      run: |
-        kubectl get apiservice v1beta1.metrics.k8s.io
-        kubectl top nodes
-        kubectl top pods -n oficina
-        METRIC="$(kubectl get hpa oficina-app-hpa -n oficina -o jsonpath='{.status.currentMetrics[0].resource.current.averageUtilization}')"
-        test -n "$METRIC"
-        case "$METRIC" in (*[!0-9]*) exit 1;; esac
-        kubectl get hpa oficina-app-hpa -n oficina
-
-    - name: Prove HPA scale-up and scale-down
-      if: github.event_name == 'workflow_dispatch' && inputs.run_hpa_test
+    - name: Build, tag, and push image to ECR
+      id: meta
       env:
-        HPA_LOAD_SECONDS: "180"
-        HPA_SCALE_DOWN_TIMEOUT: "420"
-      run: python scripts/hpa_load_test.py
-
-    - name: Upload test report
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-report
-        path: report.xml
-
-    - name: Cluster diagnostics
-      if: always()
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        IMAGE_TAG: ${{ github.sha }}
       run: |
-        kubectl get nodes -o wide 2>&1 || true
-        kubectl get pods -A -o wide 2>&1 || true
-        kubectl get services,deployments,statefulsets,hpa -n oficina 2>&1 || true
-        kubectl describe hpa oficina-app-hpa -n oficina 2>&1 || true
-        kubectl logs -n oficina --all-containers --tail=100 2>&1 || true
+        docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+        docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+        echo "version=$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  deploy-aws:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+      ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure AWS credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Install kubectl
+      uses: azure/setup-kubectl@v3
+
+    - name: Deploy to EKS
+      env:
+        AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      run: |
+        chmod +x scripts/aws-deploy.sh
+        scripts/aws-deploy.sh

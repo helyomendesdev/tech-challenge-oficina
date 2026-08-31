@@ -23,7 +23,7 @@ spec:
       containers:
       - name: app
         image: oficina-app:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 8000
         envFrom:
