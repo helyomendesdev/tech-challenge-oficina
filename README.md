@@ -1025,7 +1025,7 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 
 ## Equipe
 
-### Grupo 13 — Fase 2 e Fase 3 (atual)
+### Grupo 80 — Fase 3 (atual)
 
 | Nome | RM | Fase 3 |
 |---|---|---|
@@ -1034,7 +1034,7 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 | Luís Fernando Montes | RM367183 | observabilidade |
 | Sophia Sussa Campos Bastos | RM371864 | infraestrutura |
 
-### Grupo 26 — Fase 1 (original)
+### Grupo 13 — Fase 2 (anterior)
 
 | Nome | RM |
 |---|---|
@@ -1046,4 +1046,4 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 
 ---
 
-*Tech Challenge — Fases 1, 2 e 3 — Pós-graduação Software Architecture · FIAP · Grupo 26 (Fase 1) → Grupo 13 (Fases 2 e 3)*
+*Tech Challenge — Fases 1, 2 e 3 — Pós-graduação Software Architecture · FIAP · Grupo 26 (Fase 1) → Grupo 13 (Fase 2) → Grupo 80 (Fase 3)*
