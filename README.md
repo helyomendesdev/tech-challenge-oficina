@@ -973,6 +973,9 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 | [ADR-002 — PostgreSQL](docs/adrs/adr-002-postgresql.md) | Decisão de arquitetura: banco de dados |
 | [ADR-003 — Docker](docs/adrs/adr-003-docker.md) | Decisão de arquitetura: containerização |
 | [ADR-004 — Monolito](docs/adrs/adr-004-monolito.md) | Decisão de arquitetura: monolito para Fase 1 |
+| [RFC-004 — Logs Estruturados JSON](docs/rfcs/rfc-004-logs-estruturados-json.md) | Especificação do schema de log da Fase 3 |
+| [ADR-005 — Observabilidade: New Relic](docs/adrs/adr-005-observabilidade-new-relic.md) | Decisão de arquitetura: ferramenta e estratégia de instrumentação |
+| [ADR-006 — Correlação W3C Trace Context](docs/adrs/adr-006-correlacao-w3c-trace-context.md) | Decisão de arquitetura: correlação entre requisições |
 
 ### Design
 
