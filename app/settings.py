@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config, Csv  # C4: gestão segura de env vars
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -256,7 +257,29 @@ if not DEBUG:
 SERVICE_NAME = config('SERVICE_NAME', default='oficina-api')
 SERVICE_ENVIRONMENT = config('SERVICE_ENVIRONMENT', default='dev')
 SERVICE_VERSION = config('SERVICE_VERSION', default='1.0.0')
-OBSERVABILIDADE_SALT = config('OBSERVABILIDADE_SALT', default='dev-salt-unsecure')
+
+# Ambientes que rodam na maquina do desenvolvedor ou em CI, sem Secret de
+# cluster disponivel. Fora dessa lista (ex.: homologacao, producao) o salt
+# tem que vir de fora — ver ImproperlyConfigured abaixo.
+_AMBIENTES_OBSERVABILIDADE_LOCAIS = {'dev', 'local', 'test'}
+
+OBSERVABILIDADE_SALT = config('OBSERVABILIDADE_SALT', default=None)
+if not OBSERVABILIDADE_SALT:
+    if SERVICE_ENVIRONMENT not in _AMBIENTES_OBSERVABILIDADE_LOCAIS:
+        raise ImproperlyConfigured(
+            "OBSERVABILIDADE_SALT nao foi definido e SERVICE_ENVIRONMENT="
+            f"'{SERVICE_ENVIRONMENT}' nao e um ambiente local. Defina a variavel de "
+            "ambiente OBSERVABILIDADE_SALT com um valor aleatorio e exclusivo deste "
+            "ambiente antes de subir a aplicacao — gere com "
+            "`python -c \"import secrets; print(secrets.token_urlsafe(32))\"` e injete "
+            "via Secret do cluster (nunca reaproveite o mesmo salt entre ambientes)."
+        )
+    # Default válido SOMENTE em ambiente local (dev/test): o salt nao pode ser
+    # compartilhado entre ambientes porque, sendo previsivel e igual em todo
+    # lugar, o mesmo CPF geraria o mesmo hash em homologacao e producao — o
+    # pseudonimo deixaria de proteger e viraria identificador estavel,
+    # reversivel por dicionario de CPFs.
+    OBSERVABILIDADE_SALT = 'salt-local-nao-compartilhar-entre-ambientes'
 
 # ---------------------------------------------------------------------------
 # Logging — JSON estruturado para stdout (D-06: sem FileHandler)
