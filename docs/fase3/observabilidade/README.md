@@ -87,7 +87,7 @@ conseguiu abrir OS"*), é o **`X-Correlation-Id`**: enviado pelo cliente nas dua
 o valor na resposta** são a Lambda e a aplicação — é do valor devolvido que o cliente que não
 gerou nada tira o que reusar na segunda chamada. **Decidido pelo grupo em 2026-08-23** (Lucas),
 a partir da revisão do Hélio no PR #11, com a divisão de responsabilidade acertada em
-2026-08-24 — formalizado no ADR-006 (`docs/adrs/`, PR #15).
+2026-08-24 — formalizado no ADR-007 (`docs/adrs/`, PR #15).
 
 O `cliente.ref` (§5.1) mais a janela de tempo continuam servindo como laço fraco, para o caso
 de uma requisição chegar sem o header. É laço de última instância: depende de janela de tempo
@@ -383,8 +383,8 @@ relacional"* na documentação cobrada pelo enunciado.
 
 | Entregável | Onde |
 |---|---|
-| ADR — escolha da ferramenta de observabilidade (D-01/D-02) | ✅ `docs/adrs/adr-005-observabilidade-new-relic.md` |
-| ADR — estratégia de correlação W3C Trace Context (D-03) | ✅ `docs/adrs/adr-006-correlacao-w3c-trace-context.md` |
+| ADR — escolha da ferramenta de observabilidade (D-01/D-02) | ✅ `docs/adrs/adr-006-observabilidade-new-relic.md` |
+| ADR — estratégia de correlação W3C Trace Context (D-03) | ✅ `docs/adrs/adr-007-correlacao-w3c-trace-context.md` |
 | RFC — padrão de logs estruturados JSON | ✅ `docs/rfcs/rfc-004-logs-estruturados-json.md` |
 | Camada de instrumentação da aplicação | PR em `tech-challenge-oficina` |
 | Instrumentação da Lambda | PR em `tech-challenge-oficina-auth` (com Lucas) |

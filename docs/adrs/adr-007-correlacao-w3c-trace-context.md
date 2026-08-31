@@ -1,4 +1,4 @@
-# ADR-006 — Estratégia de Correlação entre Requisições
+# ADR-007 — Estratégia de Correlação entre Requisições
 
 | Informação | Valor |
 |---|---|
@@ -20,7 +20,7 @@ O enunciado da Fase 3 exige correlação entre requisições. A arquitetura tem 
 
 Os dois são iniciados pelo cliente de forma independente. Correlacionar *dentro* de cada fluxo é o que o enunciado pede e é o que esta decisão resolve. Correlacionar *entre* os dois é um problema diferente, tratado na §9 abaixo.
 
-A decisão precisa sobreviver à troca de plataforma de observabilidade, porque [ADR-005](adr-005-observabilidade-new-relic.md) escolheu um agente proprietário e assumiu lock-in parcial. Se a correlação também for proprietária, a migração futura fica inviável.
+A decisão precisa sobreviver à troca de plataforma de observabilidade, porque [ADR-006](adr-006-observabilidade-new-relic.md) escolheu um agente proprietário e assumiu lock-in parcial. Se a correlação também for proprietária, a migração futura fica inviável.
 
 ## 2. Decisão
 
@@ -39,7 +39,7 @@ Chamadas HTTP saintes reinjetam `traceparent` e `tracestate`.
 | Critério | Avaliação |
 |---|---|
 | **Padrão aberto** | Recomendação W3C, implementada por New Relic, Datadog, OTel, Jaeger e outros |
-| **Sobrevive à troca de ferramenta** | Se [ADR-005](adr-005-observabilidade-new-relic.md) for revisto, os headers continuam válidos — o dado de correlação não é proprietário |
+| **Sobrevive à troca de ferramenta** | Se [ADR-006](adr-006-observabilidade-new-relic.md) for revisto, os headers continuam válidos — o dado de correlação não é proprietário |
 | **Suportado pelo agente escolhido** | O agente New Relic participa de W3C Trace Context nativamente, sem código de propagação |
 | **Separação de responsabilidades** | `traceparent` é técnico e efêmero; `X-Request-Id` é de negócio, citável por um cliente ao telefone e estável na resposta HTTP |
 
@@ -53,7 +53,7 @@ Chamadas HTTP saintes reinjetam `traceparent` e `tracestate`.
 
 - Trace completo dentro de cada fluxo, ligando borda, aplicação e banco.
 - Log e trace correlacionados sem passar parâmetro por assinatura de função — o formatter lê os `contextvars`.
-- A correlação não depende de New Relic, o que reduz o custo de reverter [ADR-005](adr-005-observabilidade-new-relic.md).
+- A correlação não depende de New Relic, o que reduz o custo de reverter [ADR-006](adr-006-observabilidade-new-relic.md).
 
 ### Negativas
 

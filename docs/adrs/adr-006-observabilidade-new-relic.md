@@ -1,4 +1,4 @@
-# ADR-005 — Ferramenta e Estratégia de Instrumentação de Observabilidade
+# ADR-006 — Ferramenta e Estratégia de Instrumentação de Observabilidade
 
 | Informação | Valor |
 |---|---|
@@ -47,7 +47,7 @@ Duas decisões acopladas, registradas juntas porque a segunda só faz sentido da
 |---|---|
 | **Esforço** | Auto-instrumenta Django, DRF e psycopg2 sem código de aplicação |
 | **Logs in context** | O agente correlaciona log e trace automaticamente, via `get_linking_metadata()` |
-| **Tracing distribuído** | Suporte a W3C Trace Context pronto, o que preserva a decisão de correlação (ver [ADR-006](adr-006-correlacao-w3c-trace-context.md)) |
+| **Tracing distribuído** | Suporte a W3C Trace Context pronto, o que preserva a decisão de correlação (ver [ADR-007](adr-007-correlacao-w3c-trace-context.md)) |
 | **Kubernetes** | `nri-bundle` entrega CPU, memória, HPA e reinícios por pod sem instrumentar nada |
 | **Risco de prazo** | Menor caminho até dashboard com dado real, que é o critério de entrega |
 
@@ -56,12 +56,12 @@ Duas decisões acopladas, registradas juntas porque a segunda só faz sentido da
 ### Positivas
 
 - Custo zero e sem prazo de validade, o que remove a ferramenta da lista de riscos da entrega.
-- Métricas técnicas (latência por rota, tempo em banco, saturação de pod) chegam **sem código** — o esforço da frente concentra-se no que só a aplicação sabe: os eventos de negócio (ver [ADR-006](adr-006-correlacao-w3c-trace-context.md) e a §5.4 da especificação).
+- Métricas técnicas (latência por rota, tempo em banco, saturação de pod) chegam **sem código** — o esforço da frente concentra-se no que só a aplicação sabe: os eventos de negócio (ver [ADR-007](adr-007-correlacao-w3c-trace-context.md) e a §5.4 da especificação).
 - Um só painel para os quatro componentes, o que viabiliza a cena de trace ponta a ponta no vídeo.
 
 ### Negativas
 
-- **Vendor lock-in parcial.** O agente é proprietário: trocar de plataforma exige reinstrumentar. A mitigação é a decisão de correlação, que é padrão aberto — ver [ADR-006](adr-006-correlacao-w3c-trace-context.md).
+- **Vendor lock-in parcial.** O agente é proprietário: trocar de plataforma exige reinstrumentar. A mitigação é a decisão de correlação, que é padrão aberto — ver [ADR-007](adr-007-correlacao-w3c-trace-context.md).
 - **Um usuário só.** O free tier dá uma conta full-platform; o restante do grupo vê os dashboards por compartilhamento, não com login próprio.
 - **Teto de 100 GB.** Tráfego sintético em volume alto pode aproximar-se do limite. Mitigado rodando o gerador de carga contra homologação e por janelas curtas.
 - **A imagem passa a conhecer o agente.** Tratado no [RFC-004](../rfcs/rfc-004-logs-estruturados-json.md) e resolvido com wrapper condicional, para não exigir credencial de quem roda o projeto localmente.

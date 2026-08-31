@@ -101,7 +101,7 @@ O formatter usa a stdlib `json`, não `python-json-logger`. O schema é fixo e p
 
 ### 6.3 Origem de `trace.id` e `span.id`
 
-Preferência pelo agente de observabilidade quando presente (`get_linking_metadata()`), com queda para os `contextvars` do middleware quando ausente. O motivo está em [ADR-006 §5.2](../adrs/adr-006-correlacao-w3c-trace-context.md): os `contextvars` conhecem só o span da borda, e o agente abre spans internos que o middleware não vê.
+Preferência pelo agente de observabilidade quando presente (`get_linking_metadata()`), com queda para os `contextvars` do middleware quando ausente. O motivo está em [ADR-007 §5.2](../adrs/adr-007-correlacao-w3c-trace-context.md): os `contextvars` conhecem só o span da borda, e o agente abre spans internos que o middleware não vê.
 
 ### 6.4 O agente não encaminha logs — e não é só por duplicação
 
