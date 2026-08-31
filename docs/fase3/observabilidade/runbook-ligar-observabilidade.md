@@ -120,10 +120,18 @@ salts diferentes entre si, nunca o mesmo valor copiado de um para o outro.
 
 No cluster, a variável entra no mesmo Secret `oficina-secret` que o
 `deployment.yaml` já injeta via `envFrom: secretRef` — não crie um Secret à
-parte, como se faz para a license key do New Relic no passo 5.1. O
-`kind-deploy.sh`/`kind-deploy.ps1` não gera `OBSERVABILIDADE_SALT` sozinho —
-só cuida de `DJANGO_SECRET_KEY` e das credenciais do Postgres —, então este
-passo é manual e roda **depois** do deploy inicial já ter criado o Secret:
+parte, como se faz para a license key do New Relic no passo 5.1.
+
+**No `kind`, você não precisa fazer nada.** O `kind-deploy.sh` e o
+`kind-deploy.ps1` cuidam do salt sozinhos, nos dois caminhos: Secret novo já
+nasce com a chave, e Secret criado antes desta mudança recebe a chave por
+`kubectl patch`, sem recriar as outras — o `POSTGRES_PASSWORD` do banco
+persistente continua o que era. Nos dois casos o valor sai de
+`secrets.token_urlsafe(32)`, a menos que `OBSERVABILIDADE_SALT` já esteja no
+ambiente: exporte a variável antes de rodar o script se quiser fixar o valor.
+
+Em cluster que **não** foi provisionado por esses scripts — EKS, por exemplo —
+o passo é manual, e roda depois de o Secret já existir:
 
 ```bash
 kubectl patch secret oficina-secret \
