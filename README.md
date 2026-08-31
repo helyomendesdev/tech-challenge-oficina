@@ -81,18 +81,35 @@ A Fase 2 evolui o sistema com foco em qualidade, resiliência e escalabilidade:
 
 ### Fase 3 — Operação corporativa
 
-A Fase 3 está em desenvolvimento e separa a solução em quatro repositórios com
-CI/CD independente, governança por Pull Request e deploy para homologação e
-produção:
+A Fase 3 separa a solução em quatro repositórios com CI/CD independente,
+governança por Pull Request e deploy para homologação e produção na AWS:
 
-- [`tech-challenge-oficina`](https://github.com/helyomendesdev/tech-challenge-oficina): aplicação Django executada no Kubernetes.
-- `tech-challenge-oficina-auth`: autenticação serverless por CPF e emissão de JWT.
-- `tech-challenge-oficina-k8s`: infraestrutura Kubernetes e integrações de entrada definidas com a responsável pela infraestrutura.
-- `tech-challenge-oficina-database`: banco gerenciado provisionado por Terraform.
+- [`tech-challenge-oficina`](https://github.com/helyomendesdev/tech-challenge-oficina): aplicação Django executada no EKS.
+- [`tech-challenge-oficina-auth`](https://github.com/helyomendesdev/tech-challenge-oficina-auth): autenticação serverless por CPF e emissão de JWT.
+- [`tech-challenge-oficina-k8s`](https://github.com/helyomendesdev/tech-challenge-oficina-k8s): infraestrutura Kubernetes.
+- [`tech-challenge-oficina-database`](https://github.com/helyomendesdev/tech-challenge-oficina-database): banco gerenciado (RDS) provisionado por Terraform.
 
-A divisão, os contratos iniciais e as decisões ainda pendentes estão documentados
-em [`docs/fase3/estrutura-repositorios.md`](docs/fase3/estrutura-repositorios.md) e
-[`docs/fase3/integracao-repositorios.md`](docs/fase3/integracao-repositorios.md).
+**Reponsabilidades:**
+- Hélio Mendes — nomes, estrutura e governança dos repositórios
+- Luís Fernando Montes — observabilidade
+- Lucas Marques — autenticação
+- Sophia Sussa Campos Bastos — infraestrutura
+
+**CI/CD AWS (novo):**
+```
+GitHub Actions (push main)
+  → docker build
+  → auth AWS via OIDC (role IAM, sem secrets estáticos)
+  → push ECR (tag = git sha)
+  → update kubeconfig EKS
+  → kubectl set image + rollout status
+```
+
+Ambientes criados: `homologacao` e `producao` em todos os repositórios.
+A divisão do API Gateway e dos módulos Terraform deve ser confirmada entre
+Hélio e Sophia antes de fechar os repositórios de infraestrutura.
+
+Documentos: [`docs/adrs/adr-006-cicd-aws-ecr-eks.md`](docs/adrs/adr-006-cicd-aws-ecr-eks.md) e [`docs/fase3/estrutura-repositorios.md`](docs/fase3/estrutura-repositorios.md).
 
 ---
 
@@ -220,37 +237,35 @@ RECEBIDA → DIAGNOSTICO → AGUARDANDO → EXECUCAO → FINALIZADA → ENTREGUE
 
 > Os diagramas acima foram gerados a partir dos códigos Mermaid disponíveis em [`docs/arquitetura/c4-model.md`](docs/arquitetura/c4-model.md).
 
-### Infraestrutura provisionada (Fase 2)
+### Infraestrutura provisionada (Fase 3)
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│  Terraform (IaC) — infra/                                              │
-│  Provisiona cluster kind + aplica todos os recursos K8s               │
-└──────────────────────────┬───────────────────────────────────────────┘
-                           │
-┌──────────────────────────▼───────────────────────────────────────────┐
-│  Cluster Kubernetes (kind) — Namespace: oficina                        │
-│                                                                        │
-│  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐              │
-│  │  ConfigMap   │   │   Secret     │   │     HPA       │              │
-│  │ oficina-cfg  │   │ oficina-sec  │   │  2 → 10 pods  │              │
-│  │ (env vars)   │   │ (credenciais)│   │  CPU > 50%    │              │
-│  └──────────────┘   └──────────────┘   └───────────────┘              │
-│                                                                        │
-│  ┌───────────────────────┐      ┌───────────────────────┐             │
-│  │  Deployment           │      │  StatefulSet          │             │
-│  │  oficina-app          │      │  postgres             │             │
-│  │  2 réplicas           │      │  1 réplica            │             │
-│  │  gunicorn :8000       │      │  postgres:15          │             │
-│  │  probes HTTP health   │      │  PVC 1Gi              │             │
-│  │  limits 500m/512Mi    │      │  limits 500m/512Mi    │             │
-│  └──────────┬────────────┘      └──────────┬────────────┘             │
-│             │ :8000                         │ :5432                    │
-│  ┌──────────▼────────────┐      ┌──────────▼────────────┐             │
-│  │  Service (ClusterIP)  │      │  Service (Headless)   │             │
-│  │  oficina-app:8000     │      │  oficina-db:5432      │             │
-│  └───────────────────────┘      └───────────────────────┘             │
-└────────────────────────────────────────────────────────────────────────┘
+│  AWS Academy — EKS, ECR, RDS, ALB, VPC, API Gateway                 │
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐  │
+│  │  EKS Cluster — Namespace: oficina                              │  │
+│  │                                                                │  │
+│  │  ┌──────────────┐   ┌──────────────┐   ┌───────────────┐      │  │
+│  │  │  ConfigMap   │   │   Secret     │   │     HPA       │      │  │
+│  │  │ oficina-cfg  │   │ oficina-sec  │   │  2 → 6 pods   │      │  │
+│  │  │ (env vars)   │   │ (credenciais)│   │  CPU > 50%    │      │  │
+│  │  └──────────────┘   └──────────────┘   └───────────────┘      │  │
+│  │                                                                │  │
+│  │  ┌───────────────────────┐      ┌───────────────────────┐     │  │
+│  │  │  Deployment           │      │  RDS PostgreSQL 15    │     │  │
+│  │  │  oficina-app          │      │  (gerenciado)         │     │  │
+│  │  │  2+ réplicas          │      │                       │     │  │
+│  │  │  gunicorn :8000       │      └───────────────────────┘     │  │
+│  │  │  probes HTTP health   │                                    │  │
+│  │  └──────────┬────────────┘                                    │  │
+│  │             │ :8000                                            │  │
+│  │  ┌──────────▼────────────┐                                    │  │
+│  │  │  ALB (interno)        │                                    │  │
+│  │  │  oficina-app:8000     │                                    │  │
+│  │  └───────────────────────┘                                    │  │
+│  └────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Fluxo de deploy (CI/CD)
@@ -262,15 +277,17 @@ Push/PR ──► CI (ci.yml)
              │ 3. 210 testes (pytest-django)
              ▼
 Merge main ──► CD (cd.yml)
-             │ 1. Build + testes
-             │ 2. Docker build (oficina-app:latest)
-             │ 3. Cluster kind efêmero
-             │ 4. Deploy da aplicação, banco e Metrics Server
-             │ 5. Migrations + smoke test autenticado
-             │ 6. Métricas do HPA; carga completa no gatilho manual
+             │ 1. Docker build
+             │ 2. Auth AWS via OIDC (role IAM)
+             │ 3. Push ECR (tag = git sha)
+             │ 4. Update kubeconfig EKS
+             │ 5. kubectl set image + rollout status
              ▼
-Cluster kind pronto — kubectl port-forward → http://localhost:8000
+EKS Cluster pronto — ALB interno → API Gateway → aplicação
 ```
+
+Para desenvolvimento local, o script `scripts/kind-deploy.sh` ainda funciona
+como alternativa ao deploy AWS ( Kind + Metrics Server local).
 
 ---
 
@@ -393,7 +410,7 @@ O projeto utiliza **GitHub Actions** para integração e entrega contínuas:
 | Pipeline | Trigger | Etapas |
 |----------|---------|--------|
 | **CI** | push/PR em `main` ou `feat/*` | Dependências → Django check → testes → Docker build → relatório JUnit |
-| **CD** | push em `main` ou manual | Checks → testes → Kind → deploy → migrations → smoke → Metrics/HPA |
+| **CD** | push em `main` | Docker build → auth AWS (OIDC) → push ECR → deploy EKS → rollout status |
 
 Os arquivos dos workflows foram validados contra os scripts locais. Pipeline
 verde é evidência externa e deve ser confirmado no GitHub antes da entrega.
@@ -916,8 +933,7 @@ O relatório detalha:
 
 ## Limitações conhecidas
 
-- O deploy é local/efêmero em Kind; não há infraestrutura cloud, registry,
-  Ingress, TLS público ou domínio de produção.
+- O ambiente AWS Academy é temporário; recursos podem ser encerrados entre sessões.
 - O Metrics Server usa `--kubelet-insecure-tls`, aceitável apenas no Kind local.
 - Build/load da imagem e instalação do Metrics Server são etapas imperativas
   nos orquestradores, embora a ordem esteja documentada.
@@ -1009,14 +1025,14 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 
 ## Equipe
 
-### Grupo 13 — Fase 2 (atual)
+### Grupo 13 — Fase 2 e Fase 3 (atual)
 
-| Nome | RM |
-|---|---|
-| Hélio Mendes da Silva | RM374170 |
-| Lucas Marques | RM369825 |
-| Luís Fernando Montes | RM367183 |
-| Sophia Sussa Campos Bastos | RM371864 |
+| Nome | RM | Fase 3 |
+|---|---|---|
+| Hélio Mendes da Silva | RM374170 | nomes, estrutura e governança dos repositórios |
+| Lucas Marques | RM369825 | autenticação |
+| Luís Fernando Montes | RM367183 | observabilidade |
+| Sophia Sussa Campos Bastos | RM371864 | infraestrutura |
 
 ### Grupo 26 — Fase 1 (original)
 
@@ -1030,4 +1046,4 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 
 ---
 
-*Tech Challenge — Fases 1 e 2 — Pós-graduação Software Architecture · FIAP · Grupo 26 (Fase 1) → Grupo 13 (Fase 2)*
+*Tech Challenge — Fases 1, 2 e 3 — Pós-graduação Software Architecture · FIAP · Grupo 26 (Fase 1) → Grupo 13 (Fases 2 e 3)*
