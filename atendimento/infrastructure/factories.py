@@ -104,6 +104,7 @@ def build_finalizar_servico_use_case():
     return FinalizarServicoUseCase(
         ordem_servico_repository=DjangoOrdemServicoRepository(),
         transaction_manager=DjangoTransactionManager(),
+        observabilidade_port=ObservabilidadeAdapter(),
     )
 
 def build_simulador_orcamento_service():
