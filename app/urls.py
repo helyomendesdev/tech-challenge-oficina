@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from django.urls import path, include
 from django.views.decorators.http import require_GET
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
-from atendimento.auth_views import TokenObtainPairView, TokenRefreshView
+from atendimento.auth_views import TokenObtainPairView, TokenRefreshView, LoginCPFView
 
 
 def health_check(request):
@@ -42,6 +42,7 @@ urlpatterns = [
     # Rotas do JWT (A "Chave")
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('api/token/cpf/', LoginCPFView.as_view(), name='token_cpf'),
 
     # Rotas do SWAGGER (O que estava faltando!)
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
