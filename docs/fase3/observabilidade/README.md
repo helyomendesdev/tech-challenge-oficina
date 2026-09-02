@@ -87,7 +87,7 @@ conseguiu abrir OS"*), é o **`X-Correlation-Id`**: enviado pelo cliente nas dua
 o valor na resposta** são a Lambda e a aplicação — é do valor devolvido que o cliente que não
 gerou nada tira o que reusar na segunda chamada. **Decidido pelo grupo em 2026-08-23** (Lucas),
 a partir da revisão do Hélio no PR #11, com a divisão de responsabilidade acertada em
-2026-08-24 — formalizado no ADR-006 (`docs/adrs/`, PR #15).
+2026-08-24 — formalizado no ADR-007 (`docs/adrs/`, PR #15).
 
 O `cliente.ref` (§5.1) mais a janela de tempo continuam servindo como laço fraco, para o caso
 de uma requisição chegar sem o header. É laço de última instância: depende de janela de tempo
@@ -383,9 +383,9 @@ relacional"* na documentação cobrada pelo enunciado.
 
 | Entregável | Onde |
 |---|---|
-| ADR — escolha da ferramenta de observabilidade (D-01/D-02) | `docs/adrs/` do repo da aplicação |
-| ADR — estratégia de correlação W3C Trace Context (D-03) | `docs/adrs/` |
-| RFC — padrão de logs estruturados JSON | `docs/rfcs/` |
+| ADR — escolha da ferramenta de observabilidade (D-01/D-02) | ✅ `docs/adrs/adr-006-observabilidade-new-relic.md` |
+| ADR — estratégia de correlação W3C Trace Context (D-03) | ✅ `docs/adrs/adr-007-correlacao-w3c-trace-context.md` |
+| RFC — padrão de logs estruturados JSON | ✅ `docs/rfcs/rfc-004-logs-estruturados-json.md` |
 | Camada de instrumentação da aplicação | PR em `tech-challenge-oficina` |
 | Instrumentação da Lambda | PR em `tech-challenge-oficina-auth` (com Lucas) |
 | Agente e secret no cluster | PR em `tech-challenge-oficina-k8s` (com Sophia) |
@@ -429,6 +429,31 @@ O que ele produz, e para qual painel:
 | Threads de leitura consultando a fila | D4 — latência de leitura, senão a mediana distorce |
 | `traceparent` W3C e `X-Request-Id` em toda requisição | §5.2 — correlação |
 
+**A aceleração distorce o D2 — não grave o vídeo com valor alto.** O campo
+`duracaoStatusSegundos` mede tempo de parede entre duas transições, e nesse tempo
+está o round-trip HTTP do próprio gerador. O custo é *fixo* (~58 ms medidos), mas
+o valor simulado encolhe com a aceleração, então quanto maior a aceleração, mais
+o overhead domina — e domina primeiro os status curtos, que são justamente os que
+o painel precisa distinguir.
+
+Medido em 2026-08-23 com `--aceleracao 150000`, contra o perfil de permanência
+configurado:
+
+| Status | Esperado | Medido | Excesso |
+|---|---|---|---|
+| `RECEBIDA` | 0,6 h | 3,27 h | +2,67 h (64 ms reais) |
+| `DIAGNOSTICO` | 3,2 h | 5,62 h | +2,37 h (57 ms reais) |
+| `FINALIZADA` | 2,2 h | 4,44 h | +2,19 h (53 ms reais) |
+| `EXECUCAO` | 6,5 h | 8,45 h | +1,95 h (47 ms reais) |
+| `AGUARDANDO` | 9,0 h | 11,80 h | +2,80 h (67 ms reais) |
+
+O excesso real é o mesmo em todos (média 58 ms, contra p50 de 49 ms de latência
+medida), o que confirma a causa. `RECEBIDA` fica 5× acima da faixa configurada.
+
+Para o excesso ficar abaixo de 10% do status mais curto, a aceleração precisa
+ficar **abaixo de ~3750** — e o padrão do gerador é **3600**. Use o padrão para
+gravar; a aceleração alta serve para encher o painel rápido, não para medir.
+
 Ao encerrar (fim de `--duracao`, cota de `--ordens` ou Ctrl+C), o script para primeiro as
 threads de leitura e depois deixa as OS em andamento fecharem o ciclo, até `--espera-final`
 (padrão: o pior caso do ciclo na aceleração escolhida). Um segundo Ctrl+C aborta na hora, e o
@@ -440,6 +465,10 @@ em produção acionariam A1. É o outro lado da regra de filtro de ambiente da �
 **Limite importante:** o gerador produz *tráfego*, não eventos de negócio. `OrdemServicoEvento`
 (§5.4) é emitido pela aplicação instrumentada — rodar o gerador antes de §8 item 6 popula APM,
 logs e banco, mas **não** D1 e D2. A ordem correta é instrumentar e depois gerar.
+
+O passo a passo operacional — criar a conta, ligar o agente local, subir no
+`kind` e conferir que o dado chegou — está em
+[`runbook-ligar-observabilidade.md`](runbook-ligar-observabilidade.md).
 
 ## 10. Ordem de execução sugerida
 
