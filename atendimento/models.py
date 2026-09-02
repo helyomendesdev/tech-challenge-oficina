@@ -56,6 +56,7 @@ class Cliente(models.Model):
     documento = models.CharField(max_length=14, unique=True, validators=[validate_documento])
     email = models.EmailField()
     telefone = models.CharField(max_length=20)
+    ativo = models.BooleanField(default=True, help_text="Clientes inativos não podem fazer login")
     criado_em = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
