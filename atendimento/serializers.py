@@ -70,10 +70,10 @@ class ClienteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cliente
         fields = [
-            'id', 'nome', 'documento', 'email', 'telefone',
+            'id', 'nome', 'documento', 'email', 'telefone', 'ativo',
             'criado_em', 'created_by',
         ]
-        read_only_fields = ['id', 'criado_em', 'created_by']
+        read_only_fields = ['id', 'ativo', 'criado_em', 'created_by']
 
     def validate_documento(self, value):
         """Normaliza e valida CPF/CNPJ usando o value object do dominio."""
