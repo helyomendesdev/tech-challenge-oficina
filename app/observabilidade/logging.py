@@ -37,7 +37,10 @@ def cliente_ref(cpf: str) -> str:
     Returns:
         String no formato "sha256:<hex>" com salt de ambiente
     """
-    salt = getattr(settings, 'OBSERVABILIDADE_SALT', 'dev-salt-unsecure')
+    # settings.OBSERVABILIDADE_SALT sempre existe: app.settings levanta
+    # ImproperlyConfigured no import caso falte em ambiente nao local, entao
+    # nao ha fallback inseguro aqui.
+    salt = settings.OBSERVABILIDADE_SALT
     salted_cpf = f"{cpf}{salt}".encode('utf-8')
     hash_hex = sha256(salted_cpf).hexdigest()
     return f"sha256:{hash_hex}"
