@@ -8,14 +8,17 @@ Validam:
 - Limpeza de contextvars entre requisições
 """
 
+import importlib
 import json
 import logging
+import os
 import uuid
 from unittest.mock import patch, MagicMock
 from io import StringIO
 
 import pytest
 import requests
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
 from django.test import TestCase, RequestFactory, Client
 from django.test.utils import override_settings
@@ -170,6 +173,65 @@ class TestClienteRef(TestCase):
 
         assert cpf not in result
         assert '12345' not in result
+
+
+class TestObservabilidadeSaltConfiguracao(TestCase):
+    """Testes da falha explícita de OBSERVABILIDADE_SALT em app/settings.py.
+
+    Recarrega o módulo app.settings sob combinações de SERVICE_ENVIRONMENT e
+    OBSERVABILIDADE_SALT no ambiente, para exercitar o código de nível de
+    módulo que hoje decide entre erro explícito e default local. Usa string
+    vazia (não `del`) para OBSERVABILIDADE_SALT: o repositório roda com um
+    `.env` fora do worktree cujo salt real não pode vazar para o cenário
+    "sem salt" — string vazia no os.environ tem prioridade sobre o `.env`
+    e o helper `settings.py` trata como ausente (`if not OBSERVABILIDADE_SALT`).
+    """
+
+    def _reload_app_settings(self):
+        import app.settings as app_settings
+        return importlib.reload(app_settings)
+
+    def _com_env(self, **overrides):
+        """Aplica overrides de ambiente, recarrega e sempre restaura ao final.
+
+        Devolve o valor de OBSERVABILIDADE_SALT capturado logo após o reload
+        com os overrides — não o módulo em si: `importlib.reload` muta o
+        MESMO objeto de módulo, então devolver o módulo faria o valor
+        observado pelo teste ser o do reload de restauração do `finally`,
+        não o do cenário testado.
+        """
+        env_backup = dict(os.environ)
+        try:
+            os.environ.update(overrides)
+            module = self._reload_app_settings()
+            return module.OBSERVABILIDADE_SALT
+        finally:
+            os.environ.clear()
+            os.environ.update(env_backup)
+            self._reload_app_settings()
+
+    def test_ambiente_nao_local_sem_salt_levanta_improperly_configured(self):
+        """SERVICE_ENVIRONMENT fora da lista local e sem salt deve falhar."""
+        with self.assertRaises(ImproperlyConfigured) as excinfo:
+            self._com_env(SERVICE_ENVIRONMENT='homologacao', OBSERVABILIDADE_SALT='')
+
+        assert 'OBSERVABILIDADE_SALT' in str(excinfo.exception)
+
+    def test_ambiente_nao_local_com_salt_sobe_normal(self):
+        """SERVICE_ENVIRONMENT fora da lista local, com salt definido, não falha."""
+        salt = self._com_env(
+            SERVICE_ENVIRONMENT='homologacao',
+            OBSERVABILIDADE_SALT='salt-de-homologacao',
+        )
+
+        assert salt == 'salt-de-homologacao'
+
+    def test_ambiente_local_sem_salt_usa_default_local(self):
+        """SERVICE_ENVIRONMENT local sem salt sobe com um default explícito local."""
+        salt = self._com_env(SERVICE_ENVIRONMENT='dev', OBSERVABILIDADE_SALT='')
+
+        assert salt
+        assert 'local' in salt
 
 
 class TestCorrelationIdMiddleware(TestCase):
