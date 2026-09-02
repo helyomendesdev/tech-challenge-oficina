@@ -85,6 +85,7 @@ class ConsultaPublicaAPITest(TestCase):
         item = response.data['results'][0]
         self.assertNotIn('created_by', item)
         self.assertNotIn('cliente', item)
+        self.assertNotIn('ativo', item)
         self.assertIn('veiculo', item)
         self.assertIn('servicos', item)
         self.assertIn('pecas', item)

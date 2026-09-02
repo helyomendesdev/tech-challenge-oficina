@@ -38,7 +38,9 @@ Saída esperada em caso de sucesso:
 }
 ```
 
-As claims, o algoritmo de assinatura, a expiração e o tratamento de clientes inativos serão definidos com Lucas e registrados em RFC/ADR.
+Decisao aprovada na aplicacao principal: `Cliente.ativo` indica se o cliente pode usar os fluxos integrados da Fase 3, nasce como `true` para preservar a base existente e nao altera endpoints publicos de OS.
+
+As claims, o algoritmo de assinatura e a expiração serão definidos com Lucas e registrados em RFC/ADR.
 
 ### Infraestrutura
 
