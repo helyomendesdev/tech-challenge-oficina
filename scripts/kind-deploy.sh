@@ -38,7 +38,23 @@ kubectl apply -f k8s/namespace.yaml
 kubectl apply -f k8s/configmap.yaml
 
 if kubectl get secret oficina-secret -n "$NAMESPACE" >/dev/null 2>&1; then
-  for key in DJANGO_SECRET_KEY POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD; do
+  # Secret criado antes da chave OBSERVABILIDADE_SALT existir nao tem essa
+  # entrada. Sem ela a app cai em ImproperlyConfigured fora de ambiente local
+  # (ver app/settings.py); nao da para seguir sem a chave nem para recriar o
+  # Secret inteiro aqui (perderia as demais chaves, ex.: POSTGRES_PASSWORD
+  # atual do banco persistente). `kubectl patch` acrescenta so a chave que
+  # falta, preservando o resto — roda ANTES da validacao abaixo para que
+  # OBSERVABILIDADE_SALT ja exista quando o loop de validacao a checar.
+  observabilidade_salt_encoded="$(kubectl get secret oficina-secret -n "$NAMESPACE" -o jsonpath='{.data.OBSERVABILIDADE_SALT}' 2>/dev/null || true)"
+  if [[ -z "$observabilidade_salt_encoded" ]]; then
+    echo "Secret existente sem OBSERVABILIDADE_SALT — adicionando a chave sem recriar o Secret."
+    OBSERVABILIDADE_SALT="${OBSERVABILIDADE_SALT:-$(python -c 'import secrets; print(secrets.token_urlsafe(32))')}"
+    salt_b64="$(printf '%s' "$OBSERVABILIDADE_SALT" | python -c 'import base64,sys; print(base64.b64encode(sys.stdin.buffer.read()).decode())')"
+    kubectl patch secret oficina-secret -n "$NAMESPACE" --type=json \
+      -p "[{\"op\":\"add\",\"path\":\"/data/OBSERVABILIDADE_SALT\",\"value\":\"$salt_b64\"}]"
+  fi
+
+  for key in DJANGO_SECRET_KEY POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD OBSERVABILIDADE_SALT; do
     encoded_value="$(kubectl get secret oficina-secret -n "$NAMESPACE" -o "jsonpath={.data.${key}}")"
     decoded_value="$(python -c 'import base64,sys; print(base64.b64decode(sys.argv[1]).decode())' "$encoded_value")"
     if [[ -z "$decoded_value" || "$decoded_value" == *CHANGE_ME* ]]; then
@@ -52,6 +68,7 @@ else
   POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-$(python -c 'import secrets; print(secrets.token_urlsafe(32))')}"
   POSTGRES_DB="${POSTGRES_DB:-oficina}"
   POSTGRES_USER="${POSTGRES_USER:-oficina_user}"
+  OBSERVABILIDADE_SALT="${OBSERVABILIDADE_SALT:-$(python -c 'import secrets; print(secrets.token_urlsafe(32))')}"
 
   kubectl create secret generic oficina-secret \
     --namespace "$NAMESPACE" \
@@ -59,6 +76,7 @@ else
     --from-literal="POSTGRES_DB=$POSTGRES_DB" \
     --from-literal="POSTGRES_USER=$POSTGRES_USER" \
     --from-literal="POSTGRES_PASSWORD=$POSTGRES_PASSWORD" \
+    --from-literal="OBSERVABILIDADE_SALT=$OBSERVABILIDADE_SALT" \
     --dry-run=client -o yaml | kubectl apply -f -
 fi
 
