@@ -13,9 +13,10 @@ from django.conf import settings
 
 # Import defensivo: a aplicação roda sem o pacote newrelic instalado
 try:
-    from newrelic.agent import record_custom_event
+    from newrelic.agent import record_custom_event, application
 except ImportError:
     record_custom_event = None
+    application = None
 
 # Sob `atendimento` de proposito: o LOGGING de settings configura handler para
 # `django` e `atendimento`. Um logger de raiz propria nao tem handler nenhum, e
@@ -46,8 +47,10 @@ class ObservabilidadeAdapter:
             'service.environment': service_environment,
         }
 
-        if record_custom_event is not None:
-            # New Relic disponível: emitir custom event
+        if record_custom_event is not None and application is not None:
+            # New Relic disponível E ativo: emitir custom event.
+            # Checar `application` evita o descarte silencioso do SDK quando
+            # o agente está instalado mas inativo (ver review do Luís no PR #19).
             try:
                 record_custom_event('OrdemServicoEvento', evento_completo)
             except Exception as e:
