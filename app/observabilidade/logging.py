@@ -46,7 +46,7 @@ def cliente_ref(cpf: str) -> str:
     return f"sha256:{hash_hex}"
 
 
-def _trace_e_span() -> tuple:
+def trace_e_span() -> tuple:
     """De onde saem `trace.id` e `span.id`, nesta ordem de preferencia.
 
     Com o agente New Relic rodando, quem sabe o span corrente e ele -- os
@@ -102,7 +102,7 @@ class JSONFormatter(logging.Formatter):
         }
 
         # Injetar trace.id e span.id: agente New Relic primeiro, contextvars depois
-        trace_id, span_id = _trace_e_span()
+        trace_id, span_id = trace_e_span()
         request_id = request_id_var.get()
         correlation_id = correlation_id_var.get()
 
@@ -136,6 +136,14 @@ class JSONFormatter(logging.Formatter):
             log_data['cliente.ref'] = record.cliente_ref
 
         # Adicionar campos de integração se presentes
+        # Evento de negocio: o adapter manda o dicionario inteiro, senao o
+        # fallback sem agente perderia duracao, erroTipo e ambiente pelo caminho.
+        evento_negocio = getattr(record, 'evento_negocio', None)
+        if isinstance(evento_negocio, dict):
+            for chave, valor in evento_negocio.items():
+                if valor is not None:
+                    log_data[chave] = valor
+
         if hasattr(record, 'integracao'):
             log_data['integracao'] = record.integracao
             if hasattr(record, 'integracao_status'):

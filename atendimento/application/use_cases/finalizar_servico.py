@@ -6,7 +6,10 @@ ports e regras de dominio, sem conhecer HTTP ou ORM.
 
 from typing import Any
 
+from datetime import datetime, timezone
+
 from atendimento.application.dtos import FinalizarServicoInputDTO
+from atendimento.application.ports.observabilidade_port import ObservabilidadePort
 from atendimento.application.ports.ordem_servico_repository import (
     ItemServicoRepositoryPort,
     OrdemServicoFinalizacaoPort,
@@ -32,9 +35,11 @@ class FinalizarServicoUseCase:
             ItemServicoRepositoryPort | OrdemServicoFinalizacaoPort
         ),
         transaction_manager: TransactionManagerPort,
+        observabilidade_port: ObservabilidadePort | None = None,
     ):
         self.ordem_servico_repository = ordem_servico_repository
         self.transaction_manager = transaction_manager
+        self.observabilidade_port = observabilidade_port
 
     def execute(self, input_dto: FinalizarServicoInputDTO) -> Any:
         """Executa a finalizacao do servico preservando as regras atuais."""
@@ -77,9 +82,23 @@ class FinalizarServicoUseCase:
             if not self.ordem_servico_repository.possui_servico_nao_concluido(
                 ordem_servico
             ):
+                status_anterior = _campo(ordem_servico, "status")
                 self.ordem_servico_repository.finalizar_ordem_servico(
                     ordem_servico,
                     input_dto.data_finalizacao,
                 )
+                if self.observabilidade_port:
+                    agora = datetime.now(timezone.utc)
+                    data_ultima_transicao_anterior = _campo(ordem_servico, "data_ultima_transicao")
+                    data_abertura = _campo(ordem_servico, "data_abertura")
+                    duracao_status_segundos = (agora - (data_ultima_transicao_anterior or data_abertura)).total_seconds()
+                    self.observabilidade_port.registrar_evento_ordem_servico({
+                        'evento': 'TRANSICAO',
+                        'osId': _campo(ordem_servico, "id"),
+                        'statusAnterior': status_anterior,
+                        'statusNovo': StatusOrdemServico.FINALIZADA.value,
+                        'duracaoStatusSegundos': duracao_status_segundos,
+                        'erroTipo': None,
+                    })
 
             return item_servico
