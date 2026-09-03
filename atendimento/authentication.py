@@ -5,6 +5,7 @@ from uuid import UUID
 
 import jwt
 from django.conf import settings
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from rest_framework import exceptions
 from rest_framework.authentication import BaseAuthentication, get_authorization_header
 
@@ -140,3 +141,19 @@ class ClienteJWTAuthentication(BaseAuthentication):
         if not cliente.ativo:
             raise exceptions.AuthenticationFailed("Cliente inativo.")
         return cliente
+
+
+class ClienteJWTAuthenticationScheme(OpenApiAuthenticationExtension):
+    target_class = "atendimento.authentication.ClienteJWTAuthentication"
+    name = "ClienteJWTBearerAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "Cliente JWT RS256",
+            "description": (
+                "JWT externo de Cliente assinado com RS256. A identidade vem "
+                "de cliente_id; CPF/documento na requisicao nao autoriza acesso."
+            ),
+        }

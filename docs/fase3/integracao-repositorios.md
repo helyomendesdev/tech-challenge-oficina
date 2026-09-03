@@ -48,6 +48,25 @@ codificada em Base64. Chaves reais não devem ser versionadas.
 
 As demais decisões de autorização serão registradas com Lucas em RFC/ADR.
 
+### Autorizacao do Cliente JWT
+
+Decisao implementada na aplicacao principal: Cliente autenticado por JWT usa
+somente `request.user.cliente_id` para isolamento. Veiculos sao filtrados por
+`Veiculo.cliente_id`; Ordens de Servico sao filtradas por
+`OrdemServico.cliente_id`. Documento ou CPF enviado na requisicao nao autoriza
+nem amplia acesso.
+
+O Cliente JWT pode consultar somente seus proprios veiculos, suas proprias OS,
+o status de suas proprias OS e `consulta-cliente`. Escritas, transicoes,
+fila operacional, metricas, simulacao de orcamento, notificacoes, CRUD de
+clientes, servicos, pecas e itens permanecem negados ao Cliente JWT.
+
+`consulta-cliente` exige `Authorization: Bearer`. Para Cliente JWT, o parametro
+legado `identificador` e ignorado para autorizacao; para funcionarios, o fluxo
+operacional por placa ou CPF/CNPJ permanece.
+
+A matriz detalhada esta em `docs/fase3/matriz-permissoes-cliente-jwt.md`.
+
 ### Infraestrutura
 
 Os módulos Terraform devem expor somente outputs necessários, por exemplo:
