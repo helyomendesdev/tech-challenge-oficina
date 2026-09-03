@@ -243,12 +243,46 @@ class ClienteJWTPermissionsAPITest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(self._ids(response), [self.os_a.id])
 
+    def test_created_by_ou_user_id_nao_autorizam_cliente_jwt(self):
+        self.veiculo_b.created_by = self.funcionario_a
+        self.veiculo_b.save(update_fields=["created_by"])
+        self.os_b.created_by = self.funcionario_a
+        self.os_b.save(update_fields=["created_by"])
+
+        veiculo_response = self._request_cliente(
+            "get",
+            f"/api/v1/veiculos/{self.veiculo_b.id}/",
+        )
+        os_response = self._request_cliente(
+            "get",
+            f"/api/v1/ordens-servico/{self.os_b.id}/",
+        )
+
+        self.assertEqual(veiculo_response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(os_response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_cliente_jwt_recebe_403_em_writes(self):
         writes = [
             ("post", "/api/v1/veiculos/", {"cliente": self.cliente_a.id}),
+            (
+                "put",
+                f"/api/v1/veiculos/{self.veiculo_a.id}/",
+                {
+                    "cliente": self.cliente_a.id,
+                    "placa": self.veiculo_a.placa,
+                    "marca": "Fiat",
+                    "modelo": "Argo",
+                    "ano": 2025,
+                },
+            ),
             ("patch", f"/api/v1/veiculos/{self.veiculo_a.id}/", {"modelo": "Argo"}),
             ("delete", f"/api/v1/veiculos/{self.veiculo_a.id}/", {}),
             ("post", "/api/v1/ordens-servico/", {"cliente": self.cliente_a.id}),
+            (
+                "put",
+                f"/api/v1/ordens-servico/{self.os_a.id}/",
+                {"cliente": self.cliente_a.id, "veiculo": self.veiculo_a.id},
+            ),
             (
                 "patch",
                 f"/api/v1/ordens-servico/{self.os_a.id}/",

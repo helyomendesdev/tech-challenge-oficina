@@ -46,6 +46,44 @@ Tokens de cliente aceitos pela aplicação usam `RS256`, `iss=oficina-auth`,
 `AUTH_JWT_PUBLIC_KEY_B64`, que deve conter a chave pública PEM do emissor
 codificada em Base64. Chaves reais não devem ser versionadas.
 
+Fluxo final esperado, ainda pendente de validacao integrada em AWS:
+
+1. Cliente envia CPF para `POST /auth` no API Gateway.
+2. Lambda valida CPF, existencia do Cliente e `Cliente.ativo`.
+3. Lambda emite JWT RS256 com `sub=cliente:<id>`, `cliente_id`,
+   `principal_type=cliente`, `token_type=access`, `iss=oficina-auth`,
+   `aud=oficina-api`, `iat`, `exp` e `jti`.
+4. Django valida o JWT usando `AUTH_JWT_PUBLIC_KEY_B64`.
+5. Cliente acessa somente os proprios veiculos e ordens de servico.
+6. `consulta-cliente` exige autenticacao e usa `cliente_id`.
+7. Funcionarios continuam usando SimpleJWT.
+
+Exemplo sintetico, com valores ficticios:
+
+```http
+POST /auth HTTP/1.1
+Content-Type: application/json
+
+{"cpf": "00000000000"}
+```
+
+```json
+{
+  "access_token": "jwt.rs256.ficticio",
+  "token_type": "Bearer",
+  "expires_in": 900
+}
+```
+
+```http
+GET /api/v1/ordens-servico/consulta-cliente/ HTTP/1.1
+Authorization: Bearer jwt.rs256.ficticio
+```
+
+Status esperados na aplicacao principal: `401` para ausencia ou falha de
+autenticacao, `403` para Cliente JWT em endpoint/action negado, e `404` para
+recurso inexistente ou pertencente a outro cliente.
+
 As demais decisões de autorização serão registradas com Lucas em RFC/ADR.
 
 ### Autorizacao do Cliente JWT
@@ -66,6 +104,11 @@ legado `identificador` e ignorado para autorizacao; para funcionarios, o fluxo
 operacional por placa ou CPF/CNPJ permanece.
 
 A matriz detalhada esta em `docs/fase3/matriz-permissoes-cliente-jwt.md`.
+
+Validacao local realizada: autenticação, autorização, isolamento e schema
+OpenAPI foram exercitados com chaves RSA efemeras de teste. Esta documentacao
+nao declara deploy; a validacao ponta a ponta com Lambda, API Gateway e RDS
+continua pendente no ambiente AWS.
 
 ### Infraestrutura
 
