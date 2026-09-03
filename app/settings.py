@@ -147,6 +147,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'atendimento.authentication.ClienteJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': [
@@ -187,6 +188,8 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
+
+AUTH_JWT_PUBLIC_KEY_B64 = config('AUTH_JWT_PUBLIC_KEY_B64', default='')
 
 # ---------------------------------------------------------------------------
 # Swagger / OpenAPI
