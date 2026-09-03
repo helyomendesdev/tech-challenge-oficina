@@ -40,7 +40,13 @@ Saída esperada em caso de sucesso:
 
 Decisao aprovada na aplicacao principal: `Cliente.ativo` indica se o cliente pode usar os fluxos integrados da Fase 3, nasce como `true` para preservar a base existente e nao altera endpoints publicos de OS.
 
-As claims, o algoritmo de assinatura e a expiração serão definidos com Lucas e registrados em RFC/ADR.
+Tokens de cliente aceitos pela aplicação usam `RS256`, `iss=oficina-auth`,
+`aud=oficina-api`, `principal_type=cliente`, `token_type=access` e
+`sub=cliente:<id>`. A aplicação valida a assinatura com
+`AUTH_JWT_PUBLIC_KEY_B64`, que deve conter a chave pública PEM do emissor
+codificada em Base64. Chaves reais não devem ser versionadas.
+
+As demais decisões de autorização serão registradas com Lucas em RFC/ADR.
 
 ### Infraestrutura
 
