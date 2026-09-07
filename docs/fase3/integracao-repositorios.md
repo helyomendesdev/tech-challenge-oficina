@@ -157,3 +157,46 @@ Todos os componentes devem fornecer:
 - Alertas de falha no processamento de ordens de serviço.
 
 A implementação e a ferramenta serão definidas com Luís.
+
+---
+
+## Decisões do grupo — 2026-09-02
+
+### Teste ponta a ponta realizado
+
+O Luís validou a integração ALB → NodePort → pods → RDS com deploy no EKS.
+`/health/live/` e `/health/ready/` responderam 200, `/api/schema/` devolveu OpenAPI.
+HPA escalou de 2 → 4 → 6 pods em 36s sob carga e voltou sozinho pra 2.
+
+### Correções no Terraform (Sophia)
+
+1. Security group do ALB sem regra nenhuma, nem ingress nem egress. Declarar sem bloco de egress remove o allow-all padrão, então o ALB não conseguia falar com os nodes.
+2. Regra da porta 30080 estava no `oficina-eks-sg` (control plane). Node de managed node group sem launch template usa o cluster SG do EKS. A regra existia, no SG errado.
+3. Target group ficava unhealthy com `Target.Timeout` mesmo sem aplicação rodando.
+
+### Correções nos manifests (Sophia)
+
+- Adicionado `imagePullSecrets` em deployment e migration-job (não existia em nenhum).
+- `timeoutSeconds: 5` nas probes — default de 1s estourava sob carga.
+- Output `eks_cluster_security_group_id` adicionado para o RDS autorizar na 5432.
+
+### Repositório de documentação (Sophia)
+
+Sophia criou 11 ADRs em `tech-challenge-oficina-k8s` (branch `docs/documentacao-infraestrutura`):
+- ADR-001 ao ADR-011 (EKS, VPC, ECR, ALB/NodePort, escalabilidade, disponibilidade, config/secrets, migrations, IaC, security groups, NAT).
+- `architecture.md` com diagramas da arquitetura.
+- Abertos PRs para main, aguardando merge.
+
+### Repositório de autenticação (Lucas)
+
+- PR #5 (Draft) com 30 arquivos: Clean Architecture, CPF validation, JWT RS256, Lambda handler, OpenAPI, testes.
+- Ainda em desenvolvimento, sem review formal.
+
+### Repositório principal (Lucas)
+
+- PR #24 mergeado: campo `Cliente.ativo` + migration.
+- PR #25 mergeado: autenticação JWT de cliente (`atendimento/authentication.py`).
+
+### Pendências
+
+- Credenciais AWS atualizadas necessárias para deploy no EKS e push no ECR (sessão expirada).
