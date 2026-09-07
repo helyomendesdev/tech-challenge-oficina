@@ -43,6 +43,8 @@ def _usuario_pode_acessar(objeto, request):
         return False
     if user.is_staff or user.is_superuser:
         return True
+    if getattr(user, "cliente_id", None) is not None:
+        return False
     return getattr(objeto, "created_by_id", None) == user.id
 
 
@@ -254,6 +256,20 @@ class OrdemServicoPublicaSerializer(serializers.ModelSerializer):
             'id', 'status', 'data_abertura', 'data_inicio_execucao',
             'data_finalizacao', 'valor_total', 'veiculo', 'servicos', 'pecas',
         ]
+
+
+class VeiculoClienteJWTSerializer(serializers.ModelSerializer):
+    """Dados minimos do veiculo visiveis ao proprio Cliente JWT."""
+
+    class Meta:
+        model = Veiculo
+        fields = ['id', 'placa', 'marca', 'modelo', 'ano']
+
+
+class OrdemServicoClienteJWTSerializer(OrdemServicoPublicaSerializer):
+    """Dados minimos da OS visiveis ao proprio Cliente JWT."""
+
+    veiculo = VeiculoClienteJWTSerializer(read_only=True)
 
 
 class ItemPecaOSSerializer(serializers.ModelSerializer):

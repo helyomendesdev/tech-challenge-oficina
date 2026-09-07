@@ -2,11 +2,15 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from rest_framework import viewsets, mixins, status as drf_status
+from rest_framework.exceptions import PermissionDenied
 from drf_spectacular.utils import extend_schema, extend_schema_view, OpenApiParameter
+from rest_framework.permissions import IsAuthenticated
 from .models import Cliente, Veiculo, OrdemServico, Servico, Peca, ItemPecaOS, ItemServicoOS
 from .serializers import (
     ClienteSerializer,
+    OrdemServicoClienteJWTSerializer,
     VeiculoSerializer,
+    VeiculoClienteJWTSerializer,
     OrdemServicoSerializer,
     OrdemServicoPublicaSerializer,
     ServicoSerializer,
@@ -19,9 +23,9 @@ from .serializers import (
     TempoMedioServicoSerializer,
 )
 from .filters import OrdemServicoFilter, ClienteFilter, PecaFilter
+from .permissions import ClienteJWTViewSetPermission, is_client_principal
 from .throttles import ConsultaClienteThrottle
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, Q
 import re
@@ -109,12 +113,23 @@ class OwnedQuerySetMixin:
         if (
             user
             and user.is_authenticated
+            and is_client_principal(user)
+        ):
+            qs = self.get_cliente_queryset(qs)
+        elif (
+            user
+            and user.is_authenticated
             and not (user.is_staff or user.is_superuser)
         ):
             qs = qs.filter(created_by=user)
         return qs
 
+    def get_cliente_queryset(self, qs):
+        return qs.none()
+
     def perform_create(self, serializer):
+        if is_client_principal(self.request.user):
+            raise PermissionDenied("Cliente JWT nao pode criar recursos.")
         serializer.save(created_by=self.request.user)
 
 
@@ -129,6 +144,7 @@ class OwnedQuerySetMixin:
 class ClienteViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = Cliente.objects.all()
     serializer_class = ClienteSerializer
+    permission_classes = [ClienteJWTViewSetPermission]
     filterset_class = ClienteFilter
     search_fields = ['nome', 'documento', 'email']
     ordering_fields = ['nome', 'criado_em']
@@ -138,14 +154,25 @@ class ClienteViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
 class VeiculoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = Veiculo.objects.select_related('cliente').all()
     serializer_class = VeiculoSerializer
+    permission_classes = [ClienteJWTViewSetPermission]
+    cliente_jwt_allowed_actions = {'list', 'retrieve'}
     search_fields = ['placa', 'marca', 'modelo']
     ordering_fields = ['placa', 'ano', 'modelo']
     ordering = ['placa']
+
+    def get_cliente_queryset(self, qs):
+        return qs.filter(cliente_id=self.request.user.cliente_id)
+
+    def get_serializer_class(self):
+        if is_client_principal(self.request.user):
+            return VeiculoClienteJWTSerializer
+        return super().get_serializer_class()
 
 
 class ServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = Servico.objects.all()
     serializer_class = ServicoSerializer
+    permission_classes = [ClienteJWTViewSetPermission]
     search_fields = ['descricao']
     ordering_fields = ['descricao', 'valor_mao_de_obra']
     ordering = ['descricao']
@@ -162,6 +189,7 @@ class ServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
 class PecaViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = Peca.objects.all()
     serializer_class = PecaSerializer
+    permission_classes = [ClienteJWTViewSetPermission]
     filterset_class = PecaFilter
     search_fields = ['nome']
     ordering_fields = ['nome', 'valor_unitario', 'estoque_atual']
@@ -187,9 +215,19 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
         .all()
     )
     serializer_class = OrdemServicoSerializer
+    permission_classes = [ClienteJWTViewSetPermission]
+    cliente_jwt_allowed_actions = {'list', 'retrieve', 'consulta_cliente'}
     filterset_class = OrdemServicoFilter
     ordering_fields = ['data_abertura', 'data_finalizacao', 'valor_total', 'status']
     ordering = ['-data_abertura']
+
+    def get_cliente_queryset(self, qs):
+        return qs.filter(cliente_id=self.request.user.cliente_id)
+
+    def get_serializer_class(self):
+        if is_client_principal(self.request.user):
+            return OrdemServicoClienteJWTSerializer
+        return super().get_serializer_class()
 
     def _execute_transition(self, method_name):
         """Ponte temporaria para transicoes ainda mantidas no model legado."""
@@ -202,28 +240,49 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
 
     @extend_schema(
         description=(
-            "Endpoint público — consulta OS pela placa do veículo ou CPF/CNPJ do cliente. "
-            "Não requer autenticação. Limitado a 30 requisições/hora por IP."
+            "Consulta OS do cliente autenticado. Cliente JWT consulta somente "
+            "OS vinculadas ao seu cliente_id; identificador por query string e "
+            "mantido como parametro legado/depreciado e nao amplia escopo. "
+            "Funcionarios autenticados mantem a consulta operacional por placa "
+            "ou CPF/CNPJ. Limitado a 30 requisicoes/hora."
         ),
         parameters=[
             OpenApiParameter(
                 name='identificador',
-                description='Placa do veículo (ex.: ABC1D23) ou CPF/CNPJ do cliente',
-                required=True,
+                description=(
+                    'Parametro legado: placa ou CPF/CNPJ. Para Cliente JWT, '
+                    'nao autoriza acesso e pode ser omitido.'
+                ),
+                required=False,
                 type=str
             )
         ],
         responses={200: OrdemServicoPublicaSerializer},
-        auth=[]
     )
     @action(
         detail=False,
         methods=['get'],
         url_path='consulta-cliente',
-        permission_classes=[AllowAny],
+        permission_classes=[IsAuthenticated, ClienteJWTViewSetPermission],
         throttle_classes=[ConsultaClienteThrottle],
     )
     def consulta_cliente(self, request):
+        if is_client_principal(request.user):
+            os_list = (
+                OrdemServico.objects
+                .select_related('cliente', 'veiculo')
+                .prefetch_related('itens_servico__servico', 'itens_pecas__peca')
+                .filter(cliente_id=request.user.cliente_id)
+                .order_by('-data_abertura')
+            )
+            page = self.paginate_queryset(os_list)
+            if page is not None:
+                serializer = OrdemServicoPublicaSerializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
+
+            serializer = OrdemServicoPublicaSerializer(os_list, many=True)
+            return Response(serializer.data)
+
         identificador = request.query_params.get('identificador')
 
         if not identificador:
@@ -376,6 +435,7 @@ class OrdemServicoViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
 class ItemPecaOSViewSet(OwnedQuerySetMixin, viewsets.ModelViewSet):
     queryset = ItemPecaOS.objects.select_related('peca', 'os').all()
     serializer_class = ItemPecaOSSerializer
+    permission_classes = [ClienteJWTViewSetPermission]
     ordering_fields = ['quantidade', 'peca__nome']
     ordering = ['peca__nome']
 
@@ -388,6 +448,7 @@ class ItemServicoOSViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = ItemServicoOSSerializer
+    permission_classes = [ClienteJWTViewSetPermission]
 
     def _get_ordem_servico(self):
         user = self.request.user

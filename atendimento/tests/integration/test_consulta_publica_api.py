@@ -1,3 +1,4 @@
+# ruff: noqa: F403,F405
 from atendimento.tests.helpers import *
 class ConsultaPublicaAPITest(TestCase):
     def setUp(self):
@@ -29,13 +30,13 @@ class ConsultaPublicaAPITest(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    def test_consulta_cliente_por_placa_minuscula_sem_jwt(self):
+    def test_consulta_cliente_por_placa_minuscula_sem_jwt_retorna_401(self):
         cliente_anonimo = APIClient()
         response = cliente_anonimo.get(
             '/api/v1/ordens-servico/consulta-cliente/',
             {'identificador': self.veiculo.placa.lower()}
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_consulta_cliente_por_documento(self):
         response = self.client.get(
@@ -92,14 +93,18 @@ class ConsultaPublicaAPITest(TestCase):
         self.assertEqual(len(item['servicos']), 1)
         self.assertEqual(len(item['pecas']), 1)
 
-    def test_consulta_cliente_mantem_allowany_e_throttle_especifico(self):
-        from rest_framework.permissions import AllowAny
+    def test_consulta_cliente_exige_autenticacao_e_mantem_throttle_especifico(self):
+        from rest_framework.permissions import IsAuthenticated
+        from atendimento.permissions import ClienteJWTViewSetPermission
         from atendimento.throttles import ConsultaClienteThrottle
         from atendimento.views import OrdemServicoViewSet
 
         action_kwargs = OrdemServicoViewSet.consulta_cliente.kwargs
 
-        self.assertEqual(action_kwargs['permission_classes'], [AllowAny])
+        self.assertEqual(
+            action_kwargs['permission_classes'],
+            [IsAuthenticated, ClienteJWTViewSetPermission],
+        )
         self.assertEqual(action_kwargs['throttle_classes'], [ConsultaClienteThrottle])
 
     def test_consulta_cliente_sem_identificador(self):
