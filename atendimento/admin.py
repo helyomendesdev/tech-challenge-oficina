@@ -10,7 +10,8 @@ class ItemPecaOSInline(admin.TabularInline):
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ('nome', 'documento', 'email')
+    list_display = ('nome', 'documento', 'email', 'ativo')
+    list_filter = ('ativo',)
     search_fields = ('nome', 'documento')
 
 

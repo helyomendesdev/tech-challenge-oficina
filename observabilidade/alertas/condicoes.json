@@ -1,0 +1,120 @@
+{
+  "politica": {
+    "nome": "Oficina — Produção",
+    "incidentPreference": "PER_CONDITION",
+    "observacao": "PER_CONDITION agrupa incidentes por condição: um pod saturado não silencia um alerta de falha de OS. PER_POLICY juntaria tudo num incidente só e esconderia o segundo problema."
+  },
+  "ambiente": {
+    "producao": {
+      "OrdemServicoEvento": "`service.environment` = 'producao'",
+      "Transaction": "appName = 'oficina-api-prd'",
+      "K8sContainerSample": "clusterName = 'oficina-prd'",
+      "AwsLambdaInvocation": "entityName = 'oficina-auth-cpf-prd'",
+      "DatastoreSample": "Environment = 'prd'"
+    },
+    "homologacao": {
+      "OrdemServicoEvento": "`service.environment` = 'homologacao'",
+      "Transaction": "appName = 'oficina-api-hml'",
+      "K8sContainerSample": "clusterName = 'oficina-hml'",
+      "AwsLambdaInvocation": "entityName = 'oficina-auth-cpf-hml'",
+      "DatastoreSample": "Environment = 'hml'"
+    }
+  },
+  "condicoes": [
+    {
+      "id": "A1",
+      "nome": "Falha no processamento de ordens de serviço",
+      "exigidoPeloEnunciado": true,
+      "severidade": "CRITICAL",
+      "nrql": "SELECT count(*) FROM OrdemServicoEvento WHERE evento = 'FALHA' AND `service.environment` = 'producao'",
+      "operador": "ABOVE",
+      "limiar": 0,
+      "janelaSegundos": 300,
+      "runbook": "runbooks.md#a1--falha-no-processamento-de-ordens-de-serviço",
+      "dadoDisponivel": true
+    },
+    {
+      "id": "A2",
+      "nome": "Taxa de erro da API",
+      "severidade": "CRITICAL",
+      "nrql": "SELECT percentage(count(*), WHERE error IS true) FROM Transaction WHERE appName = 'oficina-api-prd'",
+      "operador": "ABOVE",
+      "limiar": 5,
+      "janelaSegundos": 300,
+      "runbook": "runbooks.md#a2--taxa-de-erro-da-api",
+      "dadoDisponivel": true
+    },
+    {
+      "id": "A3",
+      "nome": "Latência degradada",
+      "severidade": "WARNING",
+      "nrql": "SELECT percentile(duration, 95) FROM Transaction WHERE appName = 'oficina-api-prd'",
+      "operador": "ABOVE",
+      "limiar": 1.5,
+      "janelaSegundos": 600,
+      "runbook": "runbooks.md#a3--latência-degradada",
+      "dadoDisponivel": true
+    },
+    {
+      "id": "A4",
+      "nome": "Endpoint fora do ar",
+      "severidade": "CRITICAL",
+      "tipo": "synthetics",
+      "nrql": null,
+      "descricao": "Monitor Synthetics do tipo Ping contra a URL pública de produção, a cada 1 minuto, de 2 localidades. Alerta quando falha em 2 localidades.",
+      "runbook": "runbooks.md#a4--endpoint-fora-do-ar",
+      "dadoDisponivel": false,
+      "bloqueadoPor": "URL pública de produção — depende da infraestrutura"
+    },
+    {
+      "id": "A5",
+      "nome": "Saturação de memória do pod",
+      "severidade": "WARNING",
+      "nrql": "SELECT max(memoryWorkingSetBytes / memoryLimitBytes) * 100 FROM K8sContainerSample WHERE clusterName = 'oficina-prd' FACET podName",
+      "operador": "ABOVE",
+      "limiar": 90,
+      "janelaSegundos": 600,
+      "runbook": "runbooks.md#a5--saturação-de-memória-do-pod",
+      "dadoDisponivel": false,
+      "bloqueadoPor": "nri-bundle no cluster — depende da infraestrutura",
+      "observacao": "Exige `limits` de memória nos deployments. Sem limite definido, memoryLimitBytes é nulo e a condição nunca dispara — silenciosamente."
+    },
+    {
+      "id": "A6",
+      "nome": "Pod em CrashLoop",
+      "severidade": "CRITICAL",
+      "nrql": "SELECT max(restartCount) - min(restartCount) FROM K8sContainerSample WHERE clusterName = 'oficina-prd' FACET podName",
+      "operador": "ABOVE",
+      "limiar": 3,
+      "janelaSegundos": 900,
+      "runbook": "runbooks.md#a6--pod-em-crashloop",
+      "dadoDisponivel": false,
+      "bloqueadoPor": "nri-bundle no cluster"
+    },
+    {
+      "id": "A7",
+      "nome": "Falha de autenticação sistêmica",
+      "severidade": "CRITICAL",
+      "nrql": "SELECT percentage(count(*), WHERE error IS true) FROM AwsLambdaInvocation WHERE entityName = 'oficina-auth-cpf-prd'",
+      "operador": "ABOVE",
+      "limiar": 10,
+      "janelaSegundos": 300,
+      "runbook": "runbooks.md#a7--falha-de-autenticação-sistêmica",
+      "dadoDisponivel": false,
+      "bloqueadoPor": "Lambda com a layer do New Relic — frente de autenticação",
+      "observacao": "Mede erro da function (5xx, timeout, exceção), NÃO recusa de autenticação. CPF que não autentica é 401 esperada; contá-la faria o alerta tocar sempre que alguém digitasse errado."
+    },
+    {
+      "id": "A8",
+      "nome": "Banco saturado",
+      "severidade": "WARNING",
+      "nrql": "SELECT max(databaseConnectionsUsedPercent) FROM DatastoreSample WHERE provider = 'RdsDbInstance' AND Environment = 'prd'",
+      "operador": "ABOVE",
+      "limiar": 80,
+      "janelaSegundos": 600,
+      "runbook": "runbooks.md#a8--banco-saturado",
+      "dadoDisponivel": false,
+      "bloqueadoPor": "integração AWS do RDS — depende da infraestrutura"
+    }
+  ]
+}

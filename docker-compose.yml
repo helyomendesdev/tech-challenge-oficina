@@ -28,11 +28,9 @@ services:
     build: .
     container_name: oficina_app
     restart: unless-stopped
-    # M4: gunicorn em vez de runserver (production-ready)
-    command: >
-      sh -c "python manage.py migrate &&
-             python manage.py collectstatic --noinput &&
-             gunicorn app.wsgi:application --bind 0.0.0.0:8000 --workers 2 --timeout 60"
+    # Sem `command:` de proposito: comando explicito nao passa pelo wrapper do
+    # agente New Relic, e o compose subiria sem APM sem avisar ninguem. As duas
+    # etapas que este comando fazia viraram flags do entrypoint (abaixo).
     volumes:
       - .:/app
     ports:
@@ -44,7 +42,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - DB_HOST=db
-      - DJANGO_LOG_FILE=/tmp/oficina_atividades.log
+      - RUN_MIGRATIONS=true
+      - RUN_COLLECTSTATIC=true
       - STATIC_ROOT=/tmp/staticfiles
     depends_on:
       db:

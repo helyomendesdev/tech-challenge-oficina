@@ -60,7 +60,7 @@ jobs:
     - name: Run tests
       run: |
         python manage.py migrate
-        python -m pytest atendimento/tests/ -v --tb=short --junitxml=report.xml
+        python -m pytest atendimento/tests/ scripts/tests/ -v --tb=short --junitxml=report.xml
 
     # Passo 3: Build da imagem Docker
     - name: Build Docker image

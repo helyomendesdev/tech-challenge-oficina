@@ -15,6 +15,29 @@ class ClienteAPITest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['documento'], '52998224725')
         self.assertEqual(response.data['created_by'], self.user.id)
+        self.assertIs(response.data['ativo'], True)
+
+    def test_novo_cliente_ativo_por_padrao(self):
+        cliente = criar_cliente(usuario=self.user, documento='153.509.460-56')
+
+        self.assertIs(cliente.ativo, True)
+
+    def test_cliente_inativo_persistido(self):
+        cliente = criar_cliente(
+            usuario=self.user,
+            documento='153.509.460-56',
+            ativo=False,
+        )
+
+        cliente.refresh_from_db()
+        self.assertIs(cliente.ativo, False)
+
+    def test_admin_exibe_ativo_sem_marcar_como_somente_leitura(self):
+        from atendimento.admin import ClienteAdmin
+
+        self.assertIn('ativo', ClienteAdmin.list_display)
+        self.assertIn('ativo', ClienteAdmin.list_filter)
+        self.assertNotIn('ativo', getattr(ClienteAdmin, 'readonly_fields', ()))
 
     def test_criar_cliente_com_cnpj_valido(self):
         payload = {
@@ -76,10 +99,12 @@ class ClienteCRUDAdministrativoFase1Test(TestCase):
 
         update = self.client.patch(
             f'/api/v1/clientes/{cliente_id}/',
-            {'telefone': '11933334444'},
+            {'telefone': '11933334444', 'ativo': False},
         )
         self.assertEqual(update.status_code, status.HTTP_200_OK)
         self.assertEqual(update.data['telefone'], '11933334444')
+        self.assertIs(update.data['ativo'], True)
+        self.assertTrue(Cliente.objects.get(pk=cliente_id).ativo)
 
         delete = self.client.delete(f'/api/v1/clientes/{cliente_id}/')
         self.assertEqual(delete.status_code, status.HTTP_204_NO_CONTENT)

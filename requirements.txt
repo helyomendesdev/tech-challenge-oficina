@@ -5,6 +5,7 @@ djangorestframework-simplejwt>=5.5.1,<5.6
 drf-spectacular>=0.27,<0.28
 psycopg2-binary>=2.9,<3.0
 validate-docbr>=1.9,<2.0
+cryptography>=42.0,<45.0
 
 # Infraestrutura
 gunicorn>=22.0,<23.0
@@ -24,6 +25,9 @@ django-csp>=3.8,<4.0
 
 # Análise de segurança
 bandit>=1.7,<2.0
+
+# Observabilidade
+newrelic>=9.0,<10.0
 
 # Testes
 pytest-django>=4.8,<5.0

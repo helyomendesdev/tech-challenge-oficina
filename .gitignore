@@ -39,6 +39,7 @@ Thumbs.db
 
 # Security / analysis generated files
 .hermes/
+.claude/
 .claude-flow/
 docs/roteiro-video-fase2.md
 docs/roteiro-fala-fase2.md

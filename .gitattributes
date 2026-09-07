@@ -1,0 +1,7 @@
+# Script de shell precisa de LF mesmo quando o clone e no Windows: com CRLF o
+# container Linux morre em "/bin/sh^M: bad interpreter", e a falha so aparece
+# na maquina de quem clonou, nunca na de quem escreveu.
+*.sh text eol=lf
+
+# Entrypoint e Dockerfile entram no mesmo caso pelo COPY do build.
+Dockerfile text eol=lf

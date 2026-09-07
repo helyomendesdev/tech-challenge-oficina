@@ -5,8 +5,8 @@ cases por factories e traduzem DTOs/erros para responses. Mantem as views finas
 enquanto os ViewSets legados continuam atendendo endpoints da Fase 1.
 """
 
+from django.shortcuts import get_object_or_404
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import (
@@ -21,6 +21,8 @@ from atendimento.domain.exceptions import (
     DomainError,
 )
 from atendimento.exceptions import response_from_domain_error
+from atendimento.application.dtos import ConsultarStatusOrdemServicoOutputDTO
+from atendimento.application.use_cases.consultar_status_os import _descricao_status
 from atendimento.infrastructure.factories import (
     build_abrir_ordem_servico_use_case,
     build_atualizar_status_por_notificacao_use_case,
@@ -42,6 +44,12 @@ from atendimento.interfaces.api.serializers import (
     montar_consultar_status_dto,
     montar_listar_fila_dto,
 )
+from atendimento.models import OrdemServico
+from atendimento.permissions import (
+    ClienteJWTStatusPermission,
+    DenyClientPrincipalPermission,
+    is_client_principal,
+)
 
 
 ERRO_DOMINIO_EXAMPLE = {
@@ -49,6 +57,7 @@ ERRO_DOMINIO_EXAMPLE = {
     "status_code": 400,
     "mensagem": "Mensagem de erro de dominio.",
 }
+TOKEN_ORCAMENTO_EXAMPLE = "".join(("simulado", "-opcional"))
 
 def handle_domain_error(exc: DomainError) -> Response:
     """Converte erro de dominio em resposta HTTP da interface API."""
@@ -69,7 +78,7 @@ def _usuario_contexto(request):
 class AbrirOrdemServicoAPIView(APIView):
     """Endpoint para abertura completa de ordem de servico."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [DenyClientPrincipalPermission]
 
     @extend_schema(
         tags=["Fase 2 - Ordens de Servico"],
@@ -133,15 +142,16 @@ class AbrirOrdemServicoAPIView(APIView):
 class ConsultarStatusOrdemServicoAPIView(APIView):
     """Endpoint para consulta de status de ordem de servico."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [ClienteJWTStatusPermission]
 
     @extend_schema(
         tags=["Fase 2 - Ordens de Servico"],
         summary="Consulta de status da OS",
         description=(
             "Retorna o status atual, descricao, datas principais e valor total "
-            "da ordem de servico. Usuarios comuns acessam apenas OS criadas por "
-            "eles; staff e superuser podem consultar todas."
+            "da ordem de servico. Cliente JWT acessa apenas OS vinculada ao "
+            "seu cliente_id. Usuarios Django comuns acessam apenas OS criadas "
+            "por eles; staff e superuser podem consultar todas."
         ),
         parameters=[
             OpenApiParameter(
@@ -170,6 +180,23 @@ class ConsultarStatusOrdemServicoAPIView(APIView):
     )
     def get(self, request, ordem_servico_id: int):
         """Executa o use case de consulta e retorna o status da OS."""
+        if is_client_principal(request.user):
+            ordem_servico = get_object_or_404(
+                OrdemServico.objects.filter(cliente_id=request.user.cliente_id),
+                pk=ordem_servico_id,
+            )
+            output_dto = ConsultarStatusOrdemServicoOutputDTO(
+                ordem_servico_id=ordem_servico.id,
+                status=ordem_servico.status,
+                descricao=_descricao_status(ordem_servico),
+                data_abertura=ordem_servico.data_abertura,
+                data_inicio_execucao=ordem_servico.data_inicio_execucao,
+                data_finalizacao=ordem_servico.data_finalizacao,
+                valor_total=ordem_servico.valor_total,
+            )
+            output_serializer = ConsultarStatusOrdemServicoOutputSerializer(output_dto)
+            return Response(output_serializer.data)
+
         use_case = build_consultar_status_ordem_servico_use_case()
         input_dto = montar_consultar_status_dto(
             ordem_servico_id,
@@ -186,7 +213,7 @@ class ConsultarStatusOrdemServicoAPIView(APIView):
 class ListarFilaOrdensServicoAPIView(APIView):
     """Endpoint para listagem da fila operacional de ordens de servico."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [DenyClientPrincipalPermission]
 
     @extend_schema(
         tags=["Fase 2 - Ordens de Servico"],
@@ -217,7 +244,7 @@ class ListarFilaOrdensServicoAPIView(APIView):
 class ProcessarRespostaOrcamentoAPIView(APIView):
     """Endpoint para receber decisao externa de orcamento."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [DenyClientPrincipalPermission]
 
     @extend_schema(
         tags=["Fase 2 - Notificacoes"],
@@ -241,7 +268,7 @@ class ProcessarRespostaOrcamentoAPIView(APIView):
                     "ordem_servico_id": 8,
                     "decisao": "APROVADO",
                     "origem": "email",
-                    "token": "simulado-opcional",
+                    "token": TOKEN_ORCAMENTO_EXAMPLE,
                 },
                 request_only=True,
             ),
@@ -276,7 +303,7 @@ class ProcessarRespostaOrcamentoAPIView(APIView):
 class SimulacaoOrcamentoAPIView(APIView):
     """Endpoint para simular um sistema externo notificando decisão de orçamento."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [DenyClientPrincipalPermission]
 
     @extend_schema(
         tags=["Fase 2 - Simulação"],
@@ -342,7 +369,7 @@ class SimulacaoOrcamentoAPIView(APIView):
 class AtualizarStatusPorNotificacaoAPIView(APIView):
     """Adapter HTTP simulado para atualizacao externa de status da OS."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [DenyClientPrincipalPermission]
 
     @extend_schema(
         tags=["Fase 2 - Notificacoes"],

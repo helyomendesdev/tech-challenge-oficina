@@ -40,7 +40,23 @@ try {
 
     $secretNames = @(kubectl get secrets -n $Namespace -o jsonpath='{.items[*].metadata.name}') -split ' '
     if ($secretNames -contains 'oficina-secret') {
-        foreach ($key in @('DJANGO_SECRET_KEY', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD')) {
+        # Secret criado antes da chave OBSERVABILIDADE_SALT existir nao tem essa
+        # entrada. Sem ela a app cai em ImproperlyConfigured fora de ambiente local
+        # (ver app/settings.py); nao da para seguir sem a chave nem para recriar o
+        # Secret inteiro aqui (perderia as demais chaves, ex.: POSTGRES_PASSWORD
+        # atual do banco persistente). `kubectl patch` acrescenta so a chave que
+        # falta, preservando o resto — roda ANTES da validacao abaixo para que
+        # OBSERVABILIDADE_SALT ja exista quando o loop de validacao a checar.
+        $observabilidadeSaltEncoded = kubectl get secret oficina-secret -n $Namespace -o jsonpath='{.data.OBSERVABILIDADE_SALT}'
+        if ([string]::IsNullOrWhiteSpace($observabilidadeSaltEncoded)) {
+            Write-Host 'Secret existente sem OBSERVABILIDADE_SALT — adicionando a chave sem recriar o Secret.'
+            $observabilidadeSalt = if ($env:OBSERVABILIDADE_SALT) { $env:OBSERVABILIDADE_SALT } else { python -c "import secrets; print(secrets.token_urlsafe(32))" }
+            $saltB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($observabilidadeSalt))
+            $patch = '[{"op":"add","path":"/data/OBSERVABILIDADE_SALT","value":"' + $saltB64 + '"}]'
+            kubectl patch secret oficina-secret -n $Namespace --type=json -p $patch
+        }
+
+        foreach ($key in @('DJANGO_SECRET_KEY', 'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD', 'OBSERVABILIDADE_SALT')) {
             $encodedValue = kubectl get secret oficina-secret -n $Namespace -o "jsonpath={.data.$key}"
             $decodedValue = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($encodedValue))
             if ([string]::IsNullOrWhiteSpace($decodedValue) -or $decodedValue -like '*CHANGE_ME*') {
@@ -54,6 +70,7 @@ try {
         $postgresPassword = if ($env:POSTGRES_PASSWORD) { $env:POSTGRES_PASSWORD } else { python -c "import secrets; print(secrets.token_urlsafe(32))" }
         $postgresDb = if ($env:POSTGRES_DB) { $env:POSTGRES_DB } else { 'oficina' }
         $postgresUser = if ($env:POSTGRES_USER) { $env:POSTGRES_USER } else { 'oficina_user' }
+        $observabilidadeSalt = if ($env:OBSERVABILIDADE_SALT) { $env:OBSERVABILIDADE_SALT } else { python -c "import secrets; print(secrets.token_urlsafe(32))" }
 
         kubectl create secret generic oficina-secret `
             --namespace $Namespace `
@@ -61,6 +78,7 @@ try {
             --from-literal="POSTGRES_DB=$postgresDb" `
             --from-literal="POSTGRES_USER=$postgresUser" `
             --from-literal="POSTGRES_PASSWORD=$postgresPassword" `
+            --from-literal="OBSERVABILIDADE_SALT=$observabilidadeSalt" `
             --dry-run=client -o yaml | kubectl apply -f -
     }
 

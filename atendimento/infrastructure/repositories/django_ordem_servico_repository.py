@@ -417,6 +417,7 @@ class DjangoOrdemServicoRepository(OrdemServicoRepositoryPort):
         OrdemServico.objects.filter(pk=ordem_servico.pk).update(
             status=StatusOrdemServico.FINALIZADA.value,
             data_finalizacao=data_finalizacao,
+            data_ultima_transicao=data_finalizacao,
         )
         ordem_servico.refresh_from_db()
         return ordem_servico

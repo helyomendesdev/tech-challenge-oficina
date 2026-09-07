@@ -56,6 +56,7 @@ class Cliente(models.Model):
     documento = models.CharField(max_length=14, unique=True, validators=[validate_documento])
     email = models.EmailField()
     telefone = models.CharField(max_length=20)
+    ativo = models.BooleanField(default=True, db_index=True)
     criado_em = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
@@ -135,6 +136,10 @@ class OrdemServico(models.Model):
     data_abertura = models.DateTimeField(auto_now_add=True)
     data_inicio_execucao = models.DateTimeField(null=True, blank=True)
     data_finalizacao = models.DateTimeField(null=True, blank=True)
+    data_ultima_transicao = models.DateTimeField(
+        null=True, blank=True,
+        help_text="Instante da última transição de status. NULL para OS legadas (criadas antes desta mudança). Usado para calcular duração do status anterior."
+    )
     valor_total = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     created_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,

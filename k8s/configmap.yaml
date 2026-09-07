@@ -3,12 +3,29 @@ kind: ConfigMap
 metadata:
   name: oficina-config
   namespace: oficina
+  # This ConfigMap is environment-specific (dev/hml/prd).
+  # The app name below identifies which environment this deployment is for.
+  # Using the same image across multiple environments may cause APM metrics to merge
+  # if NEW_RELIC_APP_NAME is not changed per environment.
 data:
+  # Django Configuration
   DJANGO_DEBUG: "False"
   DJANGO_ALLOWED_HOSTS: "*"
   DJANGO_SETTINGS_MODULE: "app.settings"
   DB_HOST: "oficina-db"
   DB_PORT: "5432"
   SECURE_SSL_REDIRECT: "False"
-  DJANGO_LOG_FILE: "/tmp/oficina_atividades.log"
   STATIC_ROOT: "/app/staticfiles"
+
+  # New Relic APM Configuration
+  # Note: Logs are already emitted to stdout in JSON format and collected by Kubernetes logging.
+  # We disable New Relic's log forwarding to avoid duplicate entries in the APM dashboard.
+  NEW_RELIC_APP_NAME: "oficina-api-hml"
+  NEW_RELIC_DISTRIBUTED_TRACING_ENABLED: "true"
+  NEW_RELIC_APPLICATION_LOGGING_FORWARDING_ENABLED: "false"
+
+  # Service Identification for Observability
+  # These variables are read by app/settings.py and used to populate service context in observability events
+  SERVICE_NAME: "oficina-api"
+  SERVICE_ENVIRONMENT: "homologacao"
+  SERVICE_VERSION: "1.0.0"

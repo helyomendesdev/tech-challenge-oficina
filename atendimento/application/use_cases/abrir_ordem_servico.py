@@ -12,12 +12,14 @@ from atendimento.application.dtos import (
 )
 from atendimento.application.ports.cliente_repository import ClienteRepositoryPort
 from atendimento.application.ports.notification_port import NotificationPort
+from atendimento.application.ports.observabilidade_port import ObservabilidadePort
 from atendimento.application.ports.ordem_servico_repository import (
     OrdemServicoRepositoryPort,
 )
 from atendimento.application.ports.servico_repository import ServicoRepositoryPort
 from atendimento.application.ports.transaction_manager import TransactionManagerPort
 from atendimento.application.ports.veiculo_repository import VeiculoRepositoryPort
+from atendimento.domain.enums import StatusOrdemServico
 
 
 def _campo(objeto: Any, nome: str) -> Any:
@@ -38,6 +40,7 @@ class AbrirOrdemServicoUseCase:
         ordem_servico_repository: OrdemServicoRepositoryPort,
         transaction_manager: TransactionManagerPort,
         notification_port: NotificationPort | None = None,
+        observabilidade_port: ObservabilidadePort | None = None,
     ):
         self.cliente_repository = cliente_repository
         self.veiculo_repository = veiculo_repository
@@ -45,6 +48,7 @@ class AbrirOrdemServicoUseCase:
         self.ordem_servico_repository = ordem_servico_repository
         self.transaction_manager = transaction_manager
         self.notification_port = notification_port
+        self.observabilidade_port = observabilidade_port
 
     def execute(
         self, input_dto: AbrirOrdemServicoInputDTO
@@ -100,6 +104,7 @@ class AbrirOrdemServicoUseCase:
             )
 
         self._notificar_orcamento(ordem_servico, cliente)
+        self._registrar_evento_abertura(ordem_servico)
 
         return AbrirOrdemServicoOutputDTO(
             ordem_servico_id=_campo(ordem_servico, "id"),
@@ -118,3 +123,27 @@ class AbrirOrdemServicoUseCase:
             email=_campo(cliente, "email"),
             valor_total=_campo(ordem_servico, "valor_total"),
         )
+
+    def _registrar_evento_abertura(self, ordem_servico: Any) -> None:
+        """Registra evento ABERTURA quando houver adapter de observabilidade configurado.
+
+        Evento emitido após criação bem-sucedida:
+        - evento: ABERTURA (criação, não transição)
+        - statusAnterior: None (é criação, não transição de status anterior)
+        - statusNovo: RECEBIDA (status inicial)
+        - duracaoStatusSegundos: 0 (acaba de ser criada)
+        """
+        if not self.observabilidade_port:
+            return
+
+        os_id = _campo(ordem_servico, "id")
+        status_novo = _campo(ordem_servico, "status")
+
+        self.observabilidade_port.registrar_evento_ordem_servico({
+            'evento': 'ABERTURA',
+            'osId': os_id,
+            'statusAnterior': None,
+            'statusNovo': status_novo,
+            'duracaoStatusSegundos': 0.0,
+            'erroTipo': None,
+        })

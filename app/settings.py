@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 from decouple import config, Csv  # C4: gestão segura de env vars
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -48,6 +49,7 @@ INSTALLED_APPS = [
 # ---------------------------------------------------------------------------
 
 MIDDLEWARE = [
+    'app.observabilidade.middleware.CorrelationIdMiddleware',  # Correlação de requisições (primeiro)
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'csp.middleware.CSPMiddleware',           # Content Security Policy
@@ -145,6 +147,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
+        'atendimento.authentication.ClienteJWTAuthentication',
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': [
@@ -185,6 +188,8 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
     'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
 }
+
+AUTH_JWT_PUBLIC_KEY_B64 = config('AUTH_JWT_PUBLIC_KEY_B64', default='')
 
 # ---------------------------------------------------------------------------
 # Swagger / OpenAPI
@@ -249,38 +254,63 @@ if not DEBUG:
     X_FRAME_OPTIONS = 'DENY'
 
 # ---------------------------------------------------------------------------
-# Logging — L4: caminho absoluto para funcionar dentro do Docker
+# Observabilidade
+# ---------------------------------------------------------------------------
+
+SERVICE_NAME = config('SERVICE_NAME', default='oficina-api')
+SERVICE_ENVIRONMENT = config('SERVICE_ENVIRONMENT', default='dev')
+SERVICE_VERSION = config('SERVICE_VERSION', default='1.0.0')
+
+# Ambientes que rodam na maquina do desenvolvedor ou em CI, sem Secret de
+# cluster disponivel. Fora dessa lista (ex.: homologacao, producao) o salt
+# tem que vir de fora — ver ImproperlyConfigured abaixo.
+_AMBIENTES_OBSERVABILIDADE_LOCAIS = {'dev', 'local', 'test'}
+
+OBSERVABILIDADE_SALT = config('OBSERVABILIDADE_SALT', default=None)
+if not OBSERVABILIDADE_SALT:
+    if SERVICE_ENVIRONMENT not in _AMBIENTES_OBSERVABILIDADE_LOCAIS:
+        raise ImproperlyConfigured(
+            "OBSERVABILIDADE_SALT nao foi definido e SERVICE_ENVIRONMENT="
+            f"'{SERVICE_ENVIRONMENT}' nao e um ambiente local. Defina a variavel de "
+            "ambiente OBSERVABILIDADE_SALT com um valor aleatorio e exclusivo deste "
+            "ambiente antes de subir a aplicacao — gere com "
+            "`python -c \"import secrets; print(secrets.token_urlsafe(32))\"` e injete "
+            "via Secret do cluster (nunca reaproveite o mesmo salt entre ambientes)."
+        )
+    # Default válido SOMENTE em ambiente local (dev/test): o salt nao pode ser
+    # compartilhado entre ambientes porque, sendo previsivel e igual em todo
+    # lugar, o mesmo CPF geraria o mesmo hash em homologacao e producao — o
+    # pseudonimo deixaria de proteger e viraria identificador estavel,
+    # reversivel por dicionario de CPFs.
+    OBSERVABILIDADE_SALT = 'salt-local-nao-compartilhar-entre-ambientes'
+
+# ---------------------------------------------------------------------------
+# Logging — JSON estruturado para stdout (D-06: sem FileHandler)
 # ---------------------------------------------------------------------------
 
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {message}',
-            'style': '{',
+        'json': {
+            '()': 'app.observabilidade.logging.JSONFormatter',
         },
     },
     'handlers': {
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': os.environ.get('DJANGO_LOG_FILE', str(BASE_DIR / 'oficina_atividades.log')),
-            'formatter': 'verbose',
-        },
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+            'formatter': 'json',
+            'stream': 'ext://sys.stdout',
         },
     },
     'loggers': {
         'django': {
-            'handlers': ['file', 'console'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
         'atendimento': {
-            'handlers': ['file', 'console'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
