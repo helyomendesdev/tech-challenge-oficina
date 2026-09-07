@@ -1,9 +1,26 @@
-# Responsável padrão enquanto os usuários GitHub do grupo não forem confirmados
+# CODEOWNERS — Tech Challenge Fase 3
+# Grupo 80
+
+# Responsável padrão (fallback)
 * @helyomendesdev
 
-# Governança e pipelines
-/.github/ @helyomendesdev
-/CONTRIBUTING.md @helyomendesdev
+# App Django (principal)
+/app/ @helyomendesdev
+/atendimento/ @helyomendesdev
+/scripts/ @helyomendesdev
+/k8s/ @helyomendesdev @sophiasussa
+/infra/ @sophiasussa
+/docs/ @helyomendesdev
 
-# Documentação e integração da Fase 3
-/docs/fase3/ @helyomendesdev
+# CI/CD
+/.github/ @helyomendesdev
+
+# Autenticação (Lucas Marques)
+# Repo tech-challenge-oficina-auth: @lucasmarques
+
+# Infraestrutura (Sophia Sussa Campos Bastos)
+# Repo tech-challenge-oficina-k8s: @sophiasussa
+# Repo tech-challenge-oficina-database: @sophiasussa
+
+# Observabilidade (Luís Fernando Montes)
+# Todos os repos: @luisfernandomontes
