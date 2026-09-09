@@ -26,6 +26,7 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
   - [Com Kubernetes (kind)](#com-kubernetes-kind)
   - [Com Terraform (IaC)](#com-terraform-iac)
 - [CI/CD](#cicd)
+- [Deploys e ambientes](#deploys-e-ambientes)
 - [Variáveis de Ambiente](#variáveis-de-ambiente)
 - [Endpoints da API](#endpoints-da-api)
 - [Filtros e Busca](#filtros-e-busca)
@@ -97,7 +98,7 @@ governança por Pull Request e deploy para homologação e produção na AWS:
 
 **CI/CD AWS (novo):**
 ```
-GitHub Actions (push main)
+GitHub Actions (push em main ou develop)
   → docker build
   → auth AWS via OIDC (role IAM, sem secrets estáticos)
   → push ECR (tag = git sha)
@@ -276,7 +277,7 @@ Push/PR ──► CI (ci.yml)
              │ 2. Django check
              │ 3. 210 testes (pytest-django)
              ▼
-Merge main ──► CD (cd.yml)
+Merge em main/develop ──► CD (cd.yml)
              │ 1. Docker build
              │ 2. Auth AWS via OIDC (role IAM)
              │ 3. Push ECR (tag = git sha)
@@ -410,7 +411,7 @@ O projeto utiliza **GitHub Actions** para integração e entrega contínuas:
 | Pipeline | Trigger | Etapas |
 |----------|---------|--------|
 | **CI** | push/PR em `main` ou `feat/*` | Dependências → Django check → testes → Docker build → relatório JUnit |
-| **CD** | push em `main` | Docker build → auth AWS (OIDC) → push ECR → deploy EKS → rollout status |
+| **CD** | push em `main` (produção) ou `develop` (homologação); também `workflow_dispatch` | Docker build → auth AWS (OIDC) → push ECR → deploy EKS → rollout status |
 
 Os arquivos dos workflows foram validados contra os scripts locais. Pipeline
 verde é evidência externa e deve ser confirmado no GitHub antes da entrega.
@@ -440,6 +441,47 @@ python manage.py createsuperuser
 # 5. Inicie o servidor de desenvolvimento
 python manage.py runserver
 ```
+
+---
+
+## Deploys e ambientes
+
+A infraestrutura da Fase 3 roda em **AWS Academy** (conta de estudante, região `us-east-1`) e é
+**efêmera**: a sessão do laboratório expira em poucas horas, o crédito é finito e
+`terraform destroy` faz parte da rotina. Por isso nenhuma URL fixa aparece neste repositório —
+o `<api-id>` do API Gateway muda a cada recriação. Detalhes e motivos em
+[RFC-005 — Escolha da Nuvem: AWS](docs/rfcs/rfc-005-escolha-nuvem-aws.md).
+
+| Branch | Ambiente | Stage do API Gateway | `SERVICE_ENVIRONMENT` | App no New Relic |
+|---|---|---|---|---|
+| `develop` | Homologação | `homologacao` | `homologacao` | `oficina-api-hml` |
+| `main` | Produção | stage próprio, levantado sob demanda | `producao` | `oficina-api-prd` |
+
+O CD (`cd.yml`) dispara em push para `main` **e** `develop` e faz o mesmo caminho nos dois
+casos: build → push ECR (tag = git sha) → `kubectl set image` no EKS → `rollout status`.
+Hoje o ambiente provisionado é o de homologação.
+
+**Padrão de URL:** `https://<api-id>.execute-api.us-east-1.amazonaws.com/homologacao/`
+
+| Recurso | Caminho a partir do stage | Quem serve |
+|---|---|---|
+| Autenticação de cliente por CPF | `POST /auth` | Lambda (`tech-challenge-oficina-auth`) — devolve JWT RS256 com 900 s de validade |
+| Token de funcionário | `POST /api/token/` | Django (SimpleJWT) |
+| Swagger UI | `/api/schema/swagger-ui/` | Django (`drf-spectacular`) |
+| ReDoc / schema OpenAPI | `/api/schema/redoc/`, `/api/schema/` | Django |
+| API | `/api/v1/...` | Django |
+| Healthchecks | `/health/live/`, `/health/ready/` | Django (probes do Kubernetes) |
+
+Tudo que não é `/auth` segue `ANY /{proxy+}` → VPC Link → ALB interno `oficina-alb` (:8000) →
+NodePort 30080 → pods no EKS `oficina-eks`. O ALB não tem IP público: a única entrada é o
+API Gateway. Para descobrir o `<api-id>` da sessão atual, use o `terraform output` do
+repositório `tech-challenge-oficina-auth` ou
+`aws apigateway get-rest-apis --query "items[].{id:id,name:name}"`.
+
+Onde cada componente vive e quem o provisiona:
+[`docs/arquitetura/diagrama-componentes-nuvem.md`](docs/arquitetura/diagrama-componentes-nuvem.md).
+Os dois fluxos de autenticação (CPF → JWT e consumo com o token) estão em
+[`docs/arquitetura/diagrama-sequencia-autenticacao.md`](docs/arquitetura/diagrama-sequencia-autenticacao.md).
 
 ---
 
@@ -977,6 +1019,9 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 | Documento | Descrição |
 |---|---|
 | [C4 Model](docs/arquitetura/c4-model.md) | Diagramas de Contexto, Container, Componente e Código (com código PlantUML para renderização) |
+| [Diagrama de Componentes — Nuvem](docs/arquitetura/diagrama-componentes-nuvem.md) | AWS, APIs, banco e monitoramento da Fase 3, com tabela componente → repositório |
+| [Sequência — Autenticação por CPF](docs/arquitetura/diagrama-sequencia-autenticacao.md) | `POST /auth` na Lambda e primeiro consumo protegido com o JWT |
+| [Sequência — Abertura de OS](docs/arquitetura/diagrama-sequencia-abertura-os.md) | View → use case → repositório → banco → `OrdemServicoEvento` → 201 |
 
 ### Especificações Técnicas
 
@@ -990,7 +1035,10 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 | [ADR-003 — Docker](docs/adrs/adr-003-docker.md) | Decisão de arquitetura: containerização |
 | [ADR-004 — Monolito](docs/adrs/adr-004-monolito.md) | Decisão de arquitetura: monolito para Fase 1 |
 | [RFC-004 — Logs Estruturados JSON](docs/rfcs/rfc-004-logs-estruturados-json.md) | Especificação do schema de log da Fase 3 |
-| [ADR-006 — Observabilidade: New Relic](docs/adrs/adr-006-observabilidade-new-relic.md) | Decisão de arquitetura: ferramenta e estratégia de instrumentação |
+| [RFC-005 — Escolha da Nuvem: AWS](docs/rfcs/rfc-005-escolha-nuvem-aws.md) | Por que AWS (Academy, EKS/RDS/Lambda/API Gateway nativos) e não GCP ou Azure |
+| [RFC-006 — Autenticação via CPF com JWT RS256](docs/rfcs/rfc-006-autenticacao-cpf-jwt.md) | Estratégia de autenticação da Fase 3: Lambda, API Gateway e JWT de cliente |
+| [Justificativa formal do banco de dados](docs/justificativa-banco-dados.md) | Escolha do PostgreSQL gerenciado (RDS), modelo ER e explicação dos relacionamentos |
+| [ADR-008 — Observabilidade: New Relic](docs/adrs/adr-008-observabilidade-new-relic.md) | Decisão de arquitetura: ferramenta e estratégia de instrumentação |
 | [ADR-007 — Correlação W3C Trace Context](docs/adrs/adr-007-correlacao-w3c-trace-context.md) | Decisão de arquitetura: correlação entre requisições |
 
 ### Design
@@ -998,6 +1046,8 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 | Documento | Descrição |
 |---|---|
 | [High-Level Design (HLD)](docs/design/hld.md) | Visão de alto nível da arquitetura, fluxo de dados e ER |
+| [Diagrama de Componentes — Fase 3](docs/diagrama-componentes-fase3.png) | Visão de nuvem, APIs, banco e monitoramento ([HTML](docs/diagrama-componentes-fase3.html); versão Mermaid em [`docs/arquitetura/diagrama-componentes-nuvem.md`](docs/arquitetura/diagrama-componentes-nuvem.md)) |
+| [Diagrama de Sequência — Fase 3](docs/diagrama-sequencia-fase3.png) | Autenticação por CPF e abertura de OS ([HTML](docs/diagrama-sequencia-fase3.html); versões Mermaid em [`docs/arquitetura/`](docs/arquitetura/)) |
 | [Low-Level Design (LLD)](docs/design/lld.md) | Detalhamento de módulos, APIs, banco de dados e regras de negócio |
 | [Design Approval Sheet (DAS)](docs/das/design-approval-sheet.md) | Checklist de aprovação do design com rastreabilidade completa |
 

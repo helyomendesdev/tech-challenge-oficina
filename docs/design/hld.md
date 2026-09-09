@@ -3,7 +3,7 @@
 | Informação | Valor |
 |---|---|
 | **Documento** | High-Level Design |
-| **Versão** | 1.0 |
+| **Versão** | 1.1 |
 | **Data** | 2026-04-28 |
 | **Autores** | Afonso Victoriano Franco (RM373563), Hélio Mendes da Silva (RM374170), João Pedro Rodrigues Martins (RM372818), Luís Fernando Montes (RM367183), Sophia Sussa Campos Bastos (RM371864) |
 
@@ -79,6 +79,11 @@ O **Oficina Mecânica API** é uma aplicação monolítica que expõe uma API RE
 5. **Signal** (`post_save`) → Recalcula valor total e loga auditoria
 6. **Response** → JSON com OS criada (201 Created)
 
+> Este é o fluxo legado (`OrdemServicoViewSet`). A abertura da Fase 2/3 via
+> `POST /api/v1/ordens-servico/abrir/` — view fina, `AbrirOrdemServicoUseCase`, repositories,
+> transação e evento `OrdemServicoEvento` para o New Relic — está em
+> [`docs/arquitetura/diagrama-sequencia-abertura-os.md`](../arquitetura/diagrama-sequencia-abertura-os.md).
+
 ### 4.2 Fluxo de Segurança: Consulta Pública
 
 1. **Cliente HTTP** → `GET /api/v1/ordens-servico/consulta-cliente/?placa=ABC1234`
@@ -89,6 +94,12 @@ O **Oficina Mecânica API** é uma aplicação monolítica que expõe uma API RE
 ---
 
 ## 5. Modelo de Entidade-Relacionamento (ER)
+
+> **Versão atual:** [`docs/justificativa-banco-dados.md`](../justificativa-banco-dados.md) — modelo ER e relacionamentos a partir de
+> `atendimento/models.py`, com os campos da Fase 3 (`Cliente.ativo`,
+> `OrdemServico.data_ultima_transicao`, `created_by`) e um parágrafo por relacionamento
+> explicando cardinalidade e `on_delete`. O desenho abaixo é o original das Fases 1 e 2,
+> mantido por histórico.
 
 ```
 ┌─────────────┐       ┌─────────────┐       ┌─────────────┐
@@ -183,3 +194,4 @@ O **Oficina Mecânica API** é uma aplicação monolítica que expõe uma API RE
 | Versão | Data | Autor | Descrição |
 |---|---|---|---|
 | 1.0 | 2026-04-28 | Afonso Victoriano Franco, Hélio Mendes da Silva, João Pedro Rodrigues Martins, Luís Fernando Montes, Sophia Sussa Campos Bastos | Versão inicial |
+| 1.1 | 2026-09-09 | Luís Fernando Montes | §4.1 aponta para o diagrama de abertura via use case; §5 aponta para `docs/justificativa-banco-dados.md` (ER e relacionamentos da Fase 3) |

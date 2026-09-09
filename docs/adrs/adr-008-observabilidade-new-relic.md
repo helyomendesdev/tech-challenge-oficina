@@ -1,13 +1,13 @@
-# ADR-006 — Ferramenta e Estratégia de Instrumentação de Observabilidade
+# ADR-008 — Ferramenta e Estratégia de Instrumentação de Observabilidade
 
 | Informação | Valor |
 |---|---|
-| **ADR** | 005 |
+| **ADR** | 008 |
 | **Título** | New Relic como Plataforma de Observabilidade, com Agente Nativo |
 | **Status** | Aceito |
 | **Autores** | Luís Fernando Montes (RM367183) |
 | **Data** | 2026-08-23 |
-| **Versão** | 1.0 |
+| **Versão** | 1.1 |
 
 ---
 
@@ -81,3 +81,4 @@ Duas decisões acopladas, registradas juntas porque a segunda só faz sentido da
 | Versão | Data | Autor | Descrição |
 |---|---|---|---|
 | 1.0 | 2026-08-23 | Luís Fernando Montes | Versão inicial, formalizando D-01 e D-02 da especificação da frente de Observabilidade |
+| 1.1 | 2026-09-09 | Luís Fernando Montes | Renumerado de ADR-006 para ADR-008: o número 006 já pertencia a `adr-006-cicd-aws-ecr-eks.md`; corrigido o número interno da tabela (estava 005) |
