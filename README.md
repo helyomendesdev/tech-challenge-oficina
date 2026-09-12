@@ -26,6 +26,7 @@ API REST para gerenciamento de uma oficina mecânica, desenvolvida como entrega 
   - [Com Kubernetes (kind)](#com-kubernetes-kind)
   - [Com Terraform (IaC)](#com-terraform-iac)
 - [CI/CD](#cicd)
+- [Deploys e ambientes](#deploys-e-ambientes)
 - [Variáveis de Ambiente](#variáveis-de-ambiente)
 - [Endpoints da API](#endpoints-da-api)
 - [Filtros e Busca](#filtros-e-busca)
@@ -97,9 +98,9 @@ governança por Pull Request e deploy para homologação e produção na AWS:
 
 **CI/CD AWS (novo):**
 ```
-GitHub Actions (push main)
+GitHub Actions (push em main ou develop)
   → docker build
-  → auth AWS via OIDC (role IAM, sem secrets estáticos)
+  → auth AWS: OIDC (`AWS_ROLE_ARN`) ou, na falta dele, credenciais temporárias do AWS Academy
   → push ECR (tag = git sha)
   → update kubeconfig EKS
   → kubectl set image + rollout status
@@ -276,9 +277,9 @@ Push/PR ──► CI (ci.yml)
              │ 2. Django check
              │ 3. 210 testes (pytest-django)
              ▼
-Merge main ──► CD (cd.yml)
+Merge em main/develop ──► CD (cd.yml)
              │ 1. Docker build
-             │ 2. Auth AWS via OIDC (role IAM)
+             │ 2. Auth AWS (OIDC ou credenciais temporárias do Academy)
              │ 3. Push ECR (tag = git sha)
              │ 4. Update kubeconfig EKS
              │ 5. kubectl set image + rollout status
@@ -410,10 +411,34 @@ O projeto utiliza **GitHub Actions** para integração e entrega contínuas:
 | Pipeline | Trigger | Etapas |
 |----------|---------|--------|
 | **CI** | push/PR em `main` ou `feat/*` | Dependências → Django check → testes → Docker build → relatório JUnit |
-| **CD** | push em `main` | Docker build → auth AWS (OIDC) → push ECR → deploy EKS → rollout status |
+| **CD** | push em `main` (produção) ou `develop` (homologação); também `workflow_dispatch` | Docker build → auth AWS (OIDC ou credenciais temporárias) → push ECR → deploy EKS → rollout status |
 
-Os arquivos dos workflows foram validados contra os scripts locais. Pipeline
-verde é evidência externa e deve ser confirmado no GitHub antes da entrega.
+### Credenciais AWS no CD
+
+O `cd.yml` tem dois passos `configure-aws-credentials` mutuamente exclusivos, escolhidos pelo
+secret `AWS_ROLE_ARN`:
+
+| Modo | Quando roda | Secrets usados | Observação |
+|---|---|---|---|
+| **OIDC** (preferido) | `AWS_ROLE_ARN` definido | `AWS_ROLE_ARN`, `AWS_REGION` | Sem chave estática; exige provider OIDC e role IAM na conta ([ADR-006](docs/adrs/adr-006-cicd-aws-ecr-eks.md)) |
+| **Credenciais temporárias** (fallback) | `AWS_ROLE_ARN` vazio | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | Copiadas do painel do AWS Academy; **expiram a cada sessão do laboratório** e precisam ser reatualizadas nos secrets antes de cada deploy |
+
+O AWS Academy não permite criar provider OIDC nem roles IAM próprias, então o modo efetivamente
+usado neste projeto é o fallback. Os dois jobs (`build-and-push` e `deploy-aws`) precisam ainda de
+`ECR_REPOSITORY`, `EKS_CLUSTER_NAME` e `AWS_ACCOUNT_ID`.
+
+### O que está configurado e o que foi validado
+
+| Item | Configurado | Validado | Evidência / situação em 12/09/2026 |
+|---|---|---|---|
+| CI (`ci.yml`): build, `manage.py check`, 210 testes, Docker build | ✅ | ✅ | Check `build-and-test` verde em `main` |
+| CD (`cd.yml`): build → ECR → `kubectl set image` no EKS | ✅ | ❌ | Nenhuma execução verde do `cd.yml` atual; os últimos runs falharam antes de iniciar os jobs. Depende de secrets AWS válidos da sessão do Academy |
+| Deploy em **homologação** (EKS + RDS + API Gateway) | ✅ | ✅ manual | Feito à mão em 08/09/2026 (imagem enviada ao ECR e Deployment atualizado com `kubectl`); fluxo API Gateway → ALB → EKS → RDS testado ponta a ponta, com HPA escalando de 2 a 6 pods |
+| Deploy em **produção** (`main` → stage `producao`) | parcial | ❌ | Só existem o GitHub Environment `producao` e o valor de `SERVICE_ENVIRONMENT`; **nenhum recurso de produção foi provisionado** |
+| Observabilidade (New Relic APM, logs, dashboard) | ✅ | ✅ | Dados chegando na conta durante os testes de 08/09 ([detalhes](docs/fase3/observabilidade/README.md)) |
+
+Como a infraestrutura é efêmera (ver [Deploys e ambientes](#deploys-e-ambientes)), "validado"
+significa que funcionou na sessão indicada, não que esteja no ar agora.
 
 Badges de status:
 [![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-oficina/ci.yml?branch=main&label=CI&logo=github)](https://github.com/helyomendesdev/tech-challenge-oficina/actions/workflows/ci.yml)
@@ -440,6 +465,48 @@ python manage.py createsuperuser
 # 5. Inicie o servidor de desenvolvimento
 python manage.py runserver
 ```
+
+---
+
+## Deploys e ambientes
+
+A infraestrutura da Fase 3 roda em **AWS Academy** (conta de estudante, região `us-east-1`) e é
+**efêmera**: a sessão do laboratório expira em poucas horas, o crédito é finito e
+`terraform destroy` faz parte da rotina. Por isso nenhuma URL fixa aparece neste repositório —
+o `<api-id>` do API Gateway muda a cada recriação. Detalhes e motivos em
+[RFC-005 — Escolha da Nuvem: AWS](docs/rfcs/rfc-005-escolha-nuvem-aws.md).
+
+| Branch | Ambiente | Stage do API Gateway | `SERVICE_ENVIRONMENT` | App no New Relic |
+|---|---|---|---|---|
+| `develop` | Homologação | `homologacao` | `homologacao` | `oficina-api-hml` |
+| `main` | Produção | **não provisionado** | `producao` | `oficina-api-prd` (sem dados) |
+
+O CD (`cd.yml`) dispara em push para `main` **e** `develop` e faz o mesmo caminho nos dois
+casos: build → push ECR (tag = git sha) → `kubectl set image` no EKS → `rollout status`.
+Hoje o único ambiente provisionado é o de homologação, e o deploy nele foi feito manualmente —
+o estado do workflow está em [O que está configurado e o que foi validado](#o-que-está-configurado-e-o-que-foi-validado).
+
+**Padrão de URL:** `https://<api-id>.execute-api.us-east-1.amazonaws.com/homologacao/`
+
+| Recurso | Caminho a partir do stage | Quem serve |
+|---|---|---|
+| Autenticação de cliente por CPF | `POST /auth` | Lambda (`tech-challenge-oficina-auth`) — devolve JWT RS256 com 900 s de validade |
+| Token de funcionário | `POST /api/token/` | Django (SimpleJWT) |
+| Swagger UI | `/api/schema/swagger-ui/` | Django (`drf-spectacular`) |
+| ReDoc / schema OpenAPI | `/api/schema/redoc/`, `/api/schema/` | Django |
+| API | `/api/v1/...` | Django |
+| Healthchecks | `/health/live/`, `/health/ready/` | Django (probes do Kubernetes) |
+
+Tudo que não é `/auth` segue `ANY /{proxy+}` → VPC Link → ALB interno `oficina-alb` (:8000) →
+NodePort 30080 → pods no EKS `oficina-eks`. O ALB não tem IP público: a única entrada é o
+API Gateway. Para descobrir o `<api-id>` da sessão atual, use o `terraform output` do
+repositório `tech-challenge-oficina-auth` ou
+`aws apigateway get-rest-apis --query "items[].{id:id,name:name}"`.
+
+Onde cada componente vive e quem o provisiona:
+[`docs/arquitetura/diagrama-componentes-nuvem.md`](docs/arquitetura/diagrama-componentes-nuvem.md).
+Os dois fluxos de autenticação (CPF → JWT e consumo com o token) estão em
+[`docs/arquitetura/diagrama-sequencia-autenticacao.md`](docs/arquitetura/diagrama-sequencia-autenticacao.md).
 
 ---
 
@@ -934,6 +1001,10 @@ O relatório detalha:
 ## Limitações conhecidas
 
 - O ambiente AWS Academy é temporário; recursos podem ser encerrados entre sessões.
+- O CD (`cd.yml`) está configurado, mas não tem execução verde: depende de credenciais
+  temporárias do Academy atualizadas nos secrets. O deploy em homologação foi manual.
+- Produção não foi provisionada; `main` → `producao` existe só como convenção de branch,
+  environment e `SERVICE_ENVIRONMENT`.
 - O Metrics Server usa `--kubelet-insecure-tls`, aceitável apenas no Kind local.
 - Build/load da imagem e instalação do Metrics Server são etapas imperativas
   nos orquestradores, embora a ordem esteja documentada.
@@ -977,6 +1048,9 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 | Documento | Descrição |
 |---|---|
 | [C4 Model](docs/arquitetura/c4-model.md) | Diagramas de Contexto, Container, Componente e Código (com código PlantUML para renderização) |
+| [Diagrama de Componentes — Nuvem](docs/arquitetura/diagrama-componentes-nuvem.md) | AWS, APIs, banco e monitoramento da Fase 3, com tabela componente → repositório |
+| [Sequência — Autenticação por CPF](docs/arquitetura/diagrama-sequencia-autenticacao.md) | `POST /auth` na Lambda e primeiro consumo protegido com o JWT |
+| [Sequência — Abertura de OS](docs/arquitetura/diagrama-sequencia-abertura-os.md) | View → use case → repositório → banco → `OrdemServicoEvento` → 201 |
 
 ### Especificações Técnicas
 
@@ -990,7 +1064,10 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 | [ADR-003 — Docker](docs/adrs/adr-003-docker.md) | Decisão de arquitetura: containerização |
 | [ADR-004 — Monolito](docs/adrs/adr-004-monolito.md) | Decisão de arquitetura: monolito para Fase 1 |
 | [RFC-004 — Logs Estruturados JSON](docs/rfcs/rfc-004-logs-estruturados-json.md) | Especificação do schema de log da Fase 3 |
-| [ADR-006 — Observabilidade: New Relic](docs/adrs/adr-006-observabilidade-new-relic.md) | Decisão de arquitetura: ferramenta e estratégia de instrumentação |
+| [RFC-005 — Escolha da Nuvem: AWS](docs/rfcs/rfc-005-escolha-nuvem-aws.md) | Por que AWS (Academy, EKS/RDS/Lambda/API Gateway nativos) e não GCP ou Azure |
+| [RFC-006 — Autenticação via CPF com JWT RS256](docs/rfcs/rfc-006-autenticacao-cpf-jwt.md) | Estratégia de autenticação da Fase 3: Lambda, API Gateway e JWT de cliente |
+| [Justificativa formal do banco de dados](docs/justificativa-banco-dados.md) | Escolha do PostgreSQL gerenciado (RDS), modelo ER e explicação dos relacionamentos |
+| [ADR-008 — Observabilidade: New Relic](docs/adrs/adr-008-observabilidade-new-relic.md) | Decisão de arquitetura: ferramenta e estratégia de instrumentação |
 | [ADR-007 — Correlação W3C Trace Context](docs/adrs/adr-007-correlacao-w3c-trace-context.md) | Decisão de arquitetura: correlação entre requisições |
 
 ### Design
@@ -998,6 +1075,8 @@ A documentação completa do projeto está organizada na pasta `docs/`:
 | Documento | Descrição |
 |---|---|
 | [High-Level Design (HLD)](docs/design/hld.md) | Visão de alto nível da arquitetura, fluxo de dados e ER |
+| [Diagrama de Componentes — Fase 3](docs/diagrama-componentes-fase3.png) | Visão de nuvem, APIs, banco e monitoramento ([HTML](docs/diagrama-componentes-fase3.html); versão Mermaid em [`docs/arquitetura/diagrama-componentes-nuvem.md`](docs/arquitetura/diagrama-componentes-nuvem.md)) |
+| [Diagrama de Sequência — Fase 3](docs/diagrama-sequencia-fase3.png) | Autenticação por CPF e abertura de OS ([HTML](docs/diagrama-sequencia-fase3.html); versões Mermaid em [`docs/arquitetura/`](docs/arquitetura/)) |
 | [Low-Level Design (LLD)](docs/design/lld.md) | Detalhamento de módulos, APIs, banco de dados e regras de negócio |
 | [Design Approval Sheet (DAS)](docs/das/design-approval-sheet.md) | Checklist de aprovação do design com rastreabilidade completa |
 
