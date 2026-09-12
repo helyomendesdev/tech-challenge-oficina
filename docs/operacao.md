@@ -6,6 +6,11 @@ de orçamento, ver [`docs/regras-de-negocio.md`](regras-de-negocio.md).
 ## Limitações conhecidas
 
 - O ambiente AWS Academy é temporário; recursos podem ser encerrados entre sessões.
+- O CD (`cd.yml`) está configurado com OIDC e fallback por credenciais temporárias do Academy,
+  mas não tem execução verde: depende de secrets AWS atualizados a cada sessão. O deploy em
+  homologação foi feito manualmente em 08/09/2026.
+- Produção não foi provisionada; `main` → `producao` existe só como convenção de branch,
+  environment e `SERVICE_ENVIRONMENT`.
 - O Metrics Server usa `--kubelet-insecure-tls`, aceitável apenas no Kind local.
 - Build/load da imagem e instalação do Metrics Server são etapas imperativas nos orquestradores
   locais, embora a ordem esteja documentada.

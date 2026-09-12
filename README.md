@@ -40,8 +40,8 @@ FIAP** (pós-graduação em Software Architecture). Dois tipos de usuário conso
 | Camada | Tecnologia |
 |---|---|
 | Linguagem / framework | Python 3.11+, Django 5.1 + Django REST Framework 3.15 |
-| Banco de dados | PostgreSQL 15 (RDS gerenciado em produção) |
-| Infraestrutura | Docker + Docker Compose · Kubernetes (EKS em produção, kind local) · Terraform (IaC) |
+| Banco de dados | PostgreSQL 15 (RDS gerenciado na AWS) |
+| Infraestrutura | Docker + Docker Compose · Kubernetes (EKS na AWS, kind local) · Terraform (IaC) |
 | Autenticação | `djangorestframework-simplejwt` (funcionário) + JWT RS256 externo validado em `atendimento/authentication.py` (cliente) |
 | Observabilidade | New Relic APM/Logs/Custom Events, correlação W3C Trace Context |
 | CI/CD | GitHub Actions (`ci.yml`, `cd.yml`) → build, testes, Docker, push ECR, deploy EKS |
@@ -120,8 +120,28 @@ via Terraform, use `scripts/kind-deploy.ps1`/`.sh` ou `infra/deploy.ps1` — com
 
 O CI (`ci.yml`) roda em todo push/PR: instala dependências, `python manage.py check`, os 210
 testes com `pytest-django` e um build Docker de validação. O CD (`cd.yml`) dispara em push para
-`main` e `develop`: build da imagem → autenticação AWS via OIDC (sem secrets estáticos) → push no
-ECR (tag = git sha) → `kubectl set image` no EKS → `rollout status`.
+`main` e `develop`: build da imagem → autenticação AWS → push no ECR (tag = git sha) →
+`kubectl set image` no EKS → `rollout status`.
+
+A autenticação AWS do CD tem dois modos, escolhidos pelo secret `AWS_ROLE_ARN`: **OIDC** (role
+IAM, sem chave estática) quando ele está definido, e **credenciais temporárias do AWS Academy**
+(`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`) quando não está. Como o
+Academy não permite criar provider OIDC, o modo usado de fato é o segundo — e as credenciais
+expiram a cada sessão do laboratório, então precisam ser reatualizadas nos secrets antes de cada
+deploy. Detalhes em [ADR-006](docs/adrs/adr-006-cicd-aws-ecr-eks.md).
+
+**Configurado × validado (12/09/2026):**
+
+| Item | Configurado | Validado |
+|---|---|---|
+| CI: build, `check`, 210 testes, Docker build | ✅ | ✅ check verde em `main` |
+| CD: build → ECR → `kubectl set image` | ✅ | ❌ nenhuma execução verde do `cd.yml` atual; depende de secrets AWS válidos |
+| Deploy em **homologação** (EKS + RDS + API Gateway) | ✅ | ✅ manual, em 08/09/2026 (imagem no ECR e Deployment atualizados à mão; fluxo API Gateway → ALB → EKS → RDS testado ponta a ponta) |
+| Deploy em **produção** | parcial | ❌ nenhum recurso de produção foi provisionado; `main` → `producao` existe só como environment e `SERVICE_ENVIRONMENT` |
+| Observabilidade (New Relic) | ✅ | parcial — APM, eventos e dashboard com dados em 08/09; logs e CPU/memória do cluster dependem de PRs abertos no repositório k8s |
+
+Como a infraestrutura é efêmera, "validado" significa que funcionou na sessão indicada, não que
+esteja no ar agora.
 
 A infraestrutura roda em **AWS Academy** (conta de estudante, `us-east-1`) e é **efêmera** — a
 sessão do laboratório expira em poucas horas e `terraform destroy` faz parte da rotina. Por isso
@@ -131,7 +151,7 @@ Motivos em [RFC-005](docs/rfcs/rfc-005-escolha-nuvem-aws.md).
 | Branch | Ambiente | `SERVICE_ENVIRONMENT` | App no New Relic |
 |---|---|---|---|
 | `develop` | Homologação | `homologacao` | `oficina-api-hml` |
-| `main` | Produção | `producao` | `oficina-api-prd` |
+| `main` | Produção (**não provisionado**) | `producao` | `oficina-api-prd` (sem dados) |
 
 **Padrão de URL na AWS:** `https://<api-id>.execute-api.us-east-1.amazonaws.com/homologacao/`
 (hoje só o ambiente de homologação está provisionado). Localmente, a base é `http://localhost:8000`.
