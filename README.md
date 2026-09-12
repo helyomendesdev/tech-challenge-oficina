@@ -100,7 +100,7 @@ governança por Pull Request e deploy para homologação e produção na AWS:
 ```
 GitHub Actions (push em main ou develop)
   → docker build
-  → auth AWS via OIDC (role IAM, sem secrets estáticos)
+  → auth AWS: OIDC (`AWS_ROLE_ARN`) ou, na falta dele, credenciais temporárias do AWS Academy
   → push ECR (tag = git sha)
   → update kubeconfig EKS
   → kubectl set image + rollout status
@@ -279,7 +279,7 @@ Push/PR ──► CI (ci.yml)
              ▼
 Merge em main/develop ──► CD (cd.yml)
              │ 1. Docker build
-             │ 2. Auth AWS via OIDC (role IAM)
+             │ 2. Auth AWS (OIDC ou credenciais temporárias do Academy)
              │ 3. Push ECR (tag = git sha)
              │ 4. Update kubeconfig EKS
              │ 5. kubectl set image + rollout status
@@ -411,10 +411,34 @@ O projeto utiliza **GitHub Actions** para integração e entrega contínuas:
 | Pipeline | Trigger | Etapas |
 |----------|---------|--------|
 | **CI** | push/PR em `main` ou `feat/*` | Dependências → Django check → testes → Docker build → relatório JUnit |
-| **CD** | push em `main` (produção) ou `develop` (homologação); também `workflow_dispatch` | Docker build → auth AWS (OIDC) → push ECR → deploy EKS → rollout status |
+| **CD** | push em `main` (produção) ou `develop` (homologação); também `workflow_dispatch` | Docker build → auth AWS (OIDC ou credenciais temporárias) → push ECR → deploy EKS → rollout status |
 
-Os arquivos dos workflows foram validados contra os scripts locais. Pipeline
-verde é evidência externa e deve ser confirmado no GitHub antes da entrega.
+### Credenciais AWS no CD
+
+O `cd.yml` tem dois passos `configure-aws-credentials` mutuamente exclusivos, escolhidos pelo
+secret `AWS_ROLE_ARN`:
+
+| Modo | Quando roda | Secrets usados | Observação |
+|---|---|---|---|
+| **OIDC** (preferido) | `AWS_ROLE_ARN` definido | `AWS_ROLE_ARN`, `AWS_REGION` | Sem chave estática; exige provider OIDC e role IAM na conta ([ADR-006](docs/adrs/adr-006-cicd-aws-ecr-eks.md)) |
+| **Credenciais temporárias** (fallback) | `AWS_ROLE_ARN` vazio | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` | Copiadas do painel do AWS Academy; **expiram a cada sessão do laboratório** e precisam ser reatualizadas nos secrets antes de cada deploy |
+
+O AWS Academy não permite criar provider OIDC nem roles IAM próprias, então o modo efetivamente
+usado neste projeto é o fallback. Os dois jobs (`build-and-push` e `deploy-aws`) precisam ainda de
+`ECR_REPOSITORY`, `EKS_CLUSTER_NAME` e `AWS_ACCOUNT_ID`.
+
+### O que está configurado e o que foi validado
+
+| Item | Configurado | Validado | Evidência / situação em 12/09/2026 |
+|---|---|---|---|
+| CI (`ci.yml`): build, `manage.py check`, 210 testes, Docker build | ✅ | ✅ | Check `build-and-test` verde em `main` |
+| CD (`cd.yml`): build → ECR → `kubectl set image` no EKS | ✅ | ❌ | Nenhuma execução verde do `cd.yml` atual; os últimos runs falharam antes de iniciar os jobs. Depende de secrets AWS válidos da sessão do Academy |
+| Deploy em **homologação** (EKS + RDS + API Gateway) | ✅ | ✅ manual | Feito à mão em 08/09/2026 (imagem enviada ao ECR e Deployment atualizado com `kubectl`); fluxo API Gateway → ALB → EKS → RDS testado ponta a ponta, com HPA escalando de 2 a 6 pods |
+| Deploy em **produção** (`main` → stage `producao`) | parcial | ❌ | Só existem o GitHub Environment `producao` e o valor de `SERVICE_ENVIRONMENT`; **nenhum recurso de produção foi provisionado** |
+| Observabilidade (New Relic APM, logs, dashboard) | ✅ | ✅ | Dados chegando na conta durante os testes de 08/09 ([detalhes](docs/fase3/observabilidade/README.md)) |
+
+Como a infraestrutura é efêmera (ver [Deploys e ambientes](#deploys-e-ambientes)), "validado"
+significa que funcionou na sessão indicada, não que esteja no ar agora.
 
 Badges de status:
 [![CI](https://img.shields.io/github/actions/workflow/status/helyomendesdev/tech-challenge-oficina/ci.yml?branch=main&label=CI&logo=github)](https://github.com/helyomendesdev/tech-challenge-oficina/actions/workflows/ci.yml)
@@ -455,11 +479,12 @@ o `<api-id>` do API Gateway muda a cada recriação. Detalhes e motivos em
 | Branch | Ambiente | Stage do API Gateway | `SERVICE_ENVIRONMENT` | App no New Relic |
 |---|---|---|---|---|
 | `develop` | Homologação | `homologacao` | `homologacao` | `oficina-api-hml` |
-| `main` | Produção | stage próprio, levantado sob demanda | `producao` | `oficina-api-prd` |
+| `main` | Produção | **não provisionado** | `producao` | `oficina-api-prd` (sem dados) |
 
 O CD (`cd.yml`) dispara em push para `main` **e** `develop` e faz o mesmo caminho nos dois
 casos: build → push ECR (tag = git sha) → `kubectl set image` no EKS → `rollout status`.
-Hoje o ambiente provisionado é o de homologação.
+Hoje o único ambiente provisionado é o de homologação, e o deploy nele foi feito manualmente —
+o estado do workflow está em [O que está configurado e o que foi validado](#o-que-está-configurado-e-o-que-foi-validado).
 
 **Padrão de URL:** `https://<api-id>.execute-api.us-east-1.amazonaws.com/homologacao/`
 
@@ -976,6 +1001,10 @@ O relatório detalha:
 ## Limitações conhecidas
 
 - O ambiente AWS Academy é temporário; recursos podem ser encerrados entre sessões.
+- O CD (`cd.yml`) está configurado, mas não tem execução verde: depende de credenciais
+  temporárias do Academy atualizadas nos secrets. O deploy em homologação foi manual.
+- Produção não foi provisionada; `main` → `producao` existe só como convenção de branch,
+  environment e `SERVICE_ENVIRONMENT`.
 - O Metrics Server usa `--kubelet-insecure-tls`, aceitável apenas no Kind local.
 - Build/load da imagem e instalação do Metrics Server são etapas imperativas
   nos orquestradores, embora a ordem esteja documentada.
