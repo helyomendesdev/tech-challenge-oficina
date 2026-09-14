@@ -336,6 +336,21 @@ alguém digitasse errado. A separação vem do atributo interno `auth.motivo` no
 Cada alerta precisa de um **runbook** de uma página: o que significa, onde olhar, o que fazer.
 Isso conta como documentação arquitetural e é rápido de produzir.
 
+**Estado em 2026-09-09.** As políticas e condições foram criadas no New Relic via **NerdGraph**, a
+partir de `observabilidade/alertas/condicoes.json`:
+
+| Política | id | Conteúdo |
+|---|---|---|
+| **Oficina — Produção** | `8017165` | A1, A2, A3, A5, A6, A7, A8 com a NRQL de produção do `condicoes.json` |
+| **Oficina — Homologação** | `8017166` | As mesmas condições com a troca de filtro de ambiente da §4 (`homologacao`, `-hml`) |
+
+Notificação por e-mail para o grupo nas duas políticas. **A4 não foi criada**: Monitor Synthetics
+exige URL pública fixa, e o ambiente efêmero do AWS Academy troca o `<api-id>` do API Gateway a cada
+recriação ([RFC-005](../../rfcs/rfc-005-escolha-nuvem-aws.md)). A5–A8 existem como condição mas
+só produzem incidente quando `nri-bundle`, a layer da Lambda e a integração RDS → New Relic
+estiverem instalados — até lá, a NRQL devolve vazio e a condição fica em silêncio, o que está
+registrado em `dadoDisponivel: false` no JSON.
+
 ---
 
 ## 8. Mudanças necessárias na aplicação
@@ -383,7 +398,7 @@ relacional"* na documentação cobrada pelo enunciado.
 
 | Entregável | Onde |
 |---|---|
-| ADR — escolha da ferramenta de observabilidade (D-01/D-02) | ✅ `docs/adrs/adr-006-observabilidade-new-relic.md` |
+| ADR — escolha da ferramenta de observabilidade (D-01/D-02) | ✅ `docs/adrs/adr-008-observabilidade-new-relic.md` |
 | ADR — estratégia de correlação W3C Trace Context (D-03) | ✅ `docs/adrs/adr-007-correlacao-w3c-trace-context.md` |
 | RFC — padrão de logs estruturados JSON | ✅ `docs/rfcs/rfc-004-logs-estruturados-json.md` |
 | Camada de instrumentação da aplicação | PR em `tech-challenge-oficina` |
@@ -392,7 +407,7 @@ relacional"* na documentação cobrada pelo enunciado.
 | Monitoramento do banco | PR em `tech-challenge-oficina-database` (com Sophia) |
 | Dashboards como código (JSON exportado do New Relic) | `observabilidade/dashboards/` no repo da app |
 | Alertas e runbooks | `observabilidade/alertas/` |
-| Visão de monitoramento no Diagrama de Componentes | doc arquitetural do grupo |
+| Visão de monitoramento no Diagrama de Componentes | ✅ [`docs/arquitetura/diagrama-componentes-nuvem.md`](../../arquitetura/diagrama-componentes-nuvem.md) §5 |
 | Roteiro das duas cenas do vídeo (dashboard ao vivo; logs e traces) | doc do grupo |
 
 ---
