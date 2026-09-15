@@ -95,7 +95,11 @@ docker exec -it oficina_app python manage.py createsuperuser
 docker exec oficina_app python manage.py loaddata initial_data.json seed_data.json
 ```
 
-A API estará em `http://localhost:8000`.
+A API estará em `http://localhost:8000` (Swagger: `http://localhost:8000/api/schema/swagger-ui/`).
+Se a porta 8000 estiver ocupada, ajuste a primeira linha do `docker-compose.yml`
+(`ports: "8000:8000"`) antes de subir. As variáveis mínimas do `.env` estão em
+[`.env.example`](.env.example); o conjunto completo (New Relic, JWT de cliente, banco) está em
+[`docs/variaveis-de-ambiente.md`](docs/variaveis-de-ambiente.md).
 
 ### Sem Docker
 
@@ -109,6 +113,15 @@ python manage.py runserver
 ```
 
 ### Kubernetes (kind) e Terraform
+
+> **Nota:** os manifests em [`k8s/`](k8s/) deste repositório são executados localmente via
+> **kind** (Kubernetes in Docker) — ambiente de desenvolvimento e demonstração, recriável a
+> qualquer momento por `scripts/kind-deploy.sh`/`.ps1`. Não são os manifests de produção: a
+> infraestrutura de nuvem (EKS, ALB, RDS, observabilidade em cluster) vive nos repositórios
+> [`tech-challenge-oficina-k8s`](https://github.com/helyomendesdev/tech-challenge-oficina-k8s)
+> (EKS/ALB/observabilidade) e
+> [`tech-challenge-oficina-database`](https://github.com/helyomendesdev/tech-challenge-oficina-database)
+> (RDS via Terraform).
 
 Para um cluster local completo (Deployment, HPA, Secret dinâmico, smoke test) ou provisionamento
 via Terraform, use `scripts/kind-deploy.ps1`/`.sh` ou `infra/deploy.ps1` — comandos e detalhes em
@@ -147,6 +160,10 @@ A infraestrutura roda em **AWS Academy** (conta de estudante, `us-east-1`) e é 
 sessão do laboratório expira em poucas horas e `terraform destroy` faz parte da rotina. Por isso
 nenhuma URL fixa aparece neste repositório: o `<api-id>` do API Gateway muda a cada recriação.
 Motivos em [RFC-005](docs/rfcs/rfc-005-escolha-nuvem-aws.md).
+
+> Falhas de CD com `ExpiredToken` ou `Input required and not supplied: aws-region` são o
+> comportamento **esperado** quando os secrets do AWS Academy expiram (a cada sessão do lab) —
+> não são bug do workflow. Basta reatualizar os secrets e reexecutar.
 
 | Branch | Ambiente | `SERVICE_ENVIRONMENT` | App no New Relic |
 |---|---|---|---|
@@ -330,7 +347,21 @@ token é salvo automaticamente para as demais 76 requisições da collection.
 | `GET` | `/health/live/`, `/health/ready/` | Público (probes) |
 
 Filtros, busca e ordenação de cada recurso (ex.: `?status=`, `?cliente=`, `?estoque_zerado=true`,
-`?ordering=`) estão documentados no Swagger de cada endpoint.
+`?ordering=`) estão documentados no Swagger de cada endpoint. Exemplos:
+
+```bash
+# OS por status
+curl "http://localhost:8000/api/v1/ordens-servico/?status=RECEBIDA" \
+  -H "Authorization: Bearer TOKEN_...ICIO"
+
+# Ordenar fila pela prioridade e depois pela data de abertura
+curl "http://localhost:8000/api/v1/ordens-servico/fila/?ordering=prioridade,-aberto_em" \
+  -H "Authorization: Bearer TOKEN_...ICIO"
+
+# Peças com estoque zerado
+curl "http://localhost:8000/api/v1/pecas/?estoque_zerado=true" \
+  -H "Authorization: Bearer TOKEN_...ICIO"
+```
 
 ---
 
@@ -430,6 +461,16 @@ Grupo 80 — todos em `github.com/helyomendesdev`:
 | Sophia Sussa Campos Bastos | RM371864 | infraestrutura |
 
 ### Grupo 13 — Fase 2 (anterior)
+
+| Nome | RM |
+|---|---|
+| Afonso Victoriano Franco | RM373563 |
+| Hélio Mendes da Silva | RM374170 |
+| João Pedro Rodrigues Martins | RM372818 |
+| Luís Fernando Montes | RM367183 |
+| Sophia Sussa Campos Bastos | RM371864 |
+
+### Grupo 26 — Fase 1 (original)
 
 | Nome | RM |
 |---|---|
