@@ -4,13 +4,46 @@ on:
   push:
     branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      authorize_apply:
+        description: "Autoriza o deploy real no EKS neste run"
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   id-token: write   # OIDC
   contents: read
 
 jobs:
+  # Decide se os jobs que falam com a AWS podem rodar. `secrets` nao existe no
+  # `if` de job, entao a checagem vira output deste job. Sem credenciais o CD
+  # fica verde com os jobs de AWS pulados, em vez de vermelho.
+  preflight:
+    name: Preflight (credenciais AWS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_aws: ${{ steps.check.outputs.has_aws }}
+    env:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+    steps:
+      - name: Verifica credenciais AWS
+        id: check
+        run: |
+          if [ -n "${AWS_ROLE_ARN}" ] || { [ -n "${AWS_ACCESS_KEY_ID}" ] && [ -n "${AWS_REGION}" ]; }; then
+            echo "has_aws=true" >> "$GITHUB_OUTPUT"
+            echo "Credenciais AWS presentes."
+          else
+            echo "has_aws=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Sem credenciais AWS::Os jobs que falam com a AWS serao pulados. As credenciais do AWS Academy Learner Lab expiram a cada sessao: recadastre os secrets e rode o CD por workflow_dispatch."
+          fi
+
   build-and-push:
+    needs: [preflight]
+    if: needs.preflight.outputs.has_aws == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -52,8 +85,17 @@ jobs:
         docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
         echo "version=$IMAGE_TAG" >> $GITHUB_OUTPUT
 
+  # `scripts/aws-deploy.sh` aplica k8s/configmap.yaml e k8s/postgres-statefulset.yaml
+  # do repositorio. Enquanto o configmap versionado apontar DB_HOST para o postgres
+  # in-cluster e o cluster estiver rodando contra o RDS, um deploy automatico no push
+  # repontaria a aplicacao para um banco vazio. Por isso o deploy exige disparo manual
+  # com autorizacao explicita.
   deploy-aws:
-    needs: build-and-push
+    needs: [preflight, build-and-push]
+    if: >-
+      needs.preflight.outputs.has_aws == 'true' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.authorize_apply == true
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
